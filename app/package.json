@@ -5,16 +5,18 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p . && vite build",
+    "build": "tsc -p . && tsc -p tsconfig.worker.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p . && tsc -p tsconfig.worker.json"
   },
   "dependencies": {
+    "jose": "^6.2.12",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261014.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

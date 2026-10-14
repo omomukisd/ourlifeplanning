@@ -1,10 +1,21 @@
-// Cloudflare Workers の設定（静的ファイルの配信だけ）。
-// ビルド後の dist/ を配信する。個人データはここには含まれない。
+// Cloudflare Workers の設定。
+// - /api/* は worker/index.ts が処理し、それ以外はビルド後の dist/（画面）を配信する。
+// - データは D1 に保存する。database_id を書かなくても、初回の deploy で自動作成される。
+// - Access の設定値（ACCESS_TEAM_DOMAIN・ACCESS_AUD・ALLOWED_EMAILS）は公開リポジトリに書かず、
+//   Cloudflare の管理画面で「シークレット」として登録する。
 {
   "name": "ourlifeplanning",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "ourlifeplanning" }
+  ],
+  "keep_vars": true,
+  "observability": { "enabled": true }
 }

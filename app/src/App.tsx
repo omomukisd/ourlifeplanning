@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { sampleHousehold } from './engine/sample'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { simulate } from './engine/simulate'
-import type { Household, SimulationResult } from './engine/types'
-import { clearHousehold, loadHousehold, saveHousehold } from './storage'
+import type { SimulationResult } from './engine/types'
+import { useHousehold } from './useHousehold'
 import { Dashboard } from './ui/Dashboard'
+import { SyncBar } from './ui/SyncBar'
 import { FirePage } from './ui/FirePage'
 import { Settings } from './ui/Settings'
 import { YearTable } from './ui/YearTable'
@@ -19,26 +19,11 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 ]
 
 export default function App() {
-  const initial = useMemo(loadHousehold, [])
-  const [household, setHousehold] = useState<Household>(initial.household)
-  const [isSample, setIsSample] = useState(initial.isSample)
+  const { household, isSample, sync, update, replace, resetToSample, resolveConflict, retrySave } = useHousehold()
   const [tab, setTab] = useState<Tab>('home')
   const [scenarioId, setScenarioId] = useState(household.scenarios[0]?.id ?? 'standard')
   const [real, setReal] = useState(true)
   const [answers, setAnswers] = useState<Record<string, ScenarioAnswers> | null>(null)
-
-  const update = useCallback((fn: (d: Household) => void) => {
-    setHousehold((prev) => {
-      const draft = structuredClone(prev)
-      fn(draft)
-      return draft
-    })
-    setIsSample(false)
-  }, [])
-
-  useEffect(() => {
-    if (!isSample) saveHousehold(household)
-  }, [household, isSample])
 
   const results = useMemo(() => {
     const out: Record<string, SimulationResult> = {}
@@ -87,8 +72,13 @@ export default function App() {
         </div>
       </header>
 
+      <SyncBar sync={sync} onResolve={resolveConflict} onRetry={retrySave} />
+
       {isSample && (
-        <div className="banner">いま表示しているのは架空のサンプル世帯です。「入力」タブで自分の数字に書き換えてください。</div>
+        <div className="banner">
+          いま表示しているのは架空のサンプル世帯です。「入力」タブで自分の数字に書き換えてください。
+          {sync.mode === 'shared' && '書き換えると共有データとして保存されます。'}
+        </div>
       )}
 
       <main>
@@ -99,8 +89,9 @@ export default function App() {
           <Settings
             household={household}
             update={update}
-            replace={(h) => { setHousehold(h); setIsSample(false) }}
-            resetToSample={() => { clearHousehold(); setHousehold(sampleHousehold()); setIsSample(true) }}
+            replace={replace}
+            resetToSample={resetToSample}
+            shared={sync.mode === 'shared'}
           />
         )}
       </main>

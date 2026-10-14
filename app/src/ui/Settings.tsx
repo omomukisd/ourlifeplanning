@@ -1,4 +1,5 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
+import { getHistory, getHistoryVersion, type HistoryEntry } from '../api'
 import {
   ACCOUNT_TYPES, COST_PRESETS, EDUCATION_STAGES, RETURN_KEY_LABELS, findStage,
 } from '../engine/masters'
@@ -13,10 +14,13 @@ interface Props {
   update: (fn: (draft: Household) => void) => void
   replace: (h: Household) => void
   resetToSample: () => void
+  /** サーバーと共有しているか */
+  shared: boolean
 }
 
-export function Settings({ household: h, update, replace, resetToSample }: Props) {
+export function Settings({ household: h, update, replace, resetToSample, shared }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null)
   const adults = h.persons.filter((p) => p.role === 'adult')
   const children = h.persons.filter((p) => p.role === 'child')
   const ownerOptions = [{ value: '', label: '世帯（共有）' }, ...adults.map((p) => ({ value: p.id, label: p.nickname }))]
@@ -25,7 +29,9 @@ export function Settings({ household: h, update, replace, resetToSample }: Props
   return (
     <>
       <div className="banner">
-        入力した数字はこの端末のブラウザにだけ保存されます。夫婦での共有は次の段階で対応します。
+        {shared
+          ? '入力した内容は自動で保存され、もう一方のスマホにも反映されます（アプリを開き直したときに読み込みます）。'
+          : '入力した数字はこの端末のブラウザにだけ保存されます。'}
       </div>
 
       <details className="section" open>
@@ -221,7 +227,7 @@ export function Settings({ household: h, update, replace, resetToSample }: Props
           <div className="row-actions">
             <button className="btn" onClick={() => exportJson(h)}>ファイルに書き出す</button>
             <button className="btn" onClick={() => fileRef.current?.click()}>ファイルから読み込む</button>
-            <button className="btn danger" onClick={() => { if (confirm('入力した内容を消して、サンプルに戻しますか？')) resetToSample() }}>サンプルに戻す</button>
+            <button className="btn danger" onClick={() => { if (confirm(shared ? '共有データをサンプルに置き換えます。もう一方のスマホの内容も置き換わります。よろしいですか？（変更履歴から戻せます）' : '入力した内容を消して、サンプルに戻しますか？')) resetToSample() }}>サンプルに戻す</button>
           </div>
           <input ref={fileRef} type="file" accept="application/json" hidden onChange={async (e) => {
             const file = e.target.files?.[0]
@@ -229,6 +235,27 @@ export function Settings({ household: h, update, replace, resetToSample }: Props
             try { replace(await importJson(file)) } catch (err) { alert(`読み込めませんでした：${(err as Error).message}`) }
             e.target.value = ''
           }} />
+          {shared && (
+            <>
+              <div className="flabel" style={{ fontSize: 12, color: 'var(--ink-2)', margin: '16px 0 6px' }}>変更履歴（最新30件）</div>
+              {history === null ? (
+                <button className="btn small" onClick={async () => setHistory(await getHistory())}>履歴を表示</button>
+              ) : history.length === 0 ? <p className="note">まだ履歴はありません。</p> : (
+                <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                  {history.map((e) => (
+                    <li key={e.version} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--grid)', fontSize: 13 }}>
+                      <span>版{e.version}・{new Date(e.updatedAt).toLocaleString('ja-JP')}<br /><span style={{ color: 'var(--muted)' }}>{e.updatedBy}</span></span>
+                      <button className="btn small" onClick={async () => {
+                        if (!confirm(`版${e.version}の内容に戻しますか？（今の内容も履歴に残ります）`)) return
+                        const rec = await getHistoryVersion(e.version)
+                        if (rec) { replace(rec.data); setHistory(null) } else alert('読み込めませんでした')
+                      }}>この版に戻す</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
         </div>
       </details>
     </>
