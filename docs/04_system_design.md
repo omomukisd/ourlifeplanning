@@ -41,7 +41,12 @@ app/
 - 老齢基礎年金は、退職後も60歳まで国民年金を払う前提で満額とする
 - 余ったお金はすべて現預金に入る（自動で投資に回さない）
 
-## 5. 公開の手順（次の段階）
-1. Cloudflare Pages でこのリポジトリをつなぐ（ビルドコマンド `npm run build`、ルートディレクトリ `app`、出力 `dist`）
-2. Cloudflare Access で、夫婦のメールアドレスだけを許可する
-3. Workers + D1 にデータの保存先を作り、`storage.ts` を差し替える
+## 5. 公開の手順
+Cloudflare Workers（静的ファイルの配信）で公開する。設定は `app/wrangler.jsonc`。
+
+1. Cloudflare の Workers でこのリポジトリをつなぐ
+   - ルートディレクトリ：`app`
+   - ビルドコマンド：`npm run build`
+   - デプロイコマンド：`npx wrangler deploy`
+2. Cloudflare Access で、夫婦のメールアドレスだけを許可する（次の段階）
+3. Workers + D1 にデータの保存先を作り、`storage.ts` を差し替える（次の段階）

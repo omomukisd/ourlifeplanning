@@ -1,0 +1,10 @@
+// Cloudflare Workers の設定（静的ファイルの配信だけ）。
+// ビルド後の dist/ を配信する。個人データはここには含まれない。
+{
+  "name": "ourlifeplanning",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
