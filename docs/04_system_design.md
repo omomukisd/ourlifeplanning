@@ -78,7 +78,7 @@ sequenceDiagram
 ### 6.1 デプロイ（Workers Builds）
 - ルートディレクトリ：`app`
 - ビルドコマンド：`npm run build`
-- デプロイコマンド：`npx wrangler deploy`
+- デプロイコマンド：`npx wrangler deploy`（wrangler は devDependencies で版を固定）
 - D1 データベース（`ourlifeplanning`）は、初回のデプロイで自動作成される。ビルドログに D1 の作成エラーが出た場合は、管理画面の D1 で同じ名前のデータベースを作り、その ID を `wrangler.jsonc` の `d1_databases` に `database_id` として追記する（ID は秘密情報ではない）
 
 ### 6.2 Cloudflare Access（ログイン）
