@@ -143,6 +143,38 @@ export const PENSION = {
   advancePerMonth: 0.004,
 }
 
+/** 手取りから額面を推定するための税・社会保険の値（会社員・概算） */
+export const INCOME_TAX = {
+  socialInsurance: {
+    /** 厚生年金（本人負担） */
+    pensionRate: 0.0915,
+    pensionGrossCap: 650_000 * 12 + 1_500_000 * 2,
+    /** 健康保険（協会けんぽの全国平均・本人負担） */
+    healthRate: 0.05,
+    /** 介護保険（40〜64歳・本人負担） */
+    careRate: 0.0081,
+    /** 雇用保険（本人負担） */
+    employmentRate: 0.005,
+  },
+  /** 所得税の基礎控除 */
+  basicDeduction: 580_000,
+  /** 住民税の基礎控除 */
+  residentBasicDeduction: 430_000,
+  residentRate: 0.1,
+  /** 住民税の均等割＋森林環境税 */
+  residentPerCapita: 6_000,
+  reconstructionRate: 0.021,
+  brackets: [
+    { upTo: 1_949_000, rate: 0.05, deduction: 0 },
+    { upTo: 3_299_000, rate: 0.10, deduction: 97_500 },
+    { upTo: 6_949_000, rate: 0.20, deduction: 427_500 },
+    { upTo: 8_999_000, rate: 0.23, deduction: 636_000 },
+    { upTo: 17_999_000, rate: 0.33, deduction: 1_536_000 },
+    { upTo: 39_999_000, rate: 0.40, deduction: 2_796_000 },
+    { upTo: Infinity, rate: 0.45, deduction: 4_796_000 },
+  ],
+}
+
 export const SOCIAL_INSURANCE = {
   /** 国民年金保険料（月額・令和7年度） */
   nationalPensionMonthly: 17_510,

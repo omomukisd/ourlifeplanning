@@ -1,10 +1,15 @@
 import { useRef, useState } from 'react'
 import { getHistory, getHistoryVersion, type HistoryEntry } from '../api'
 import {
-  ACCOUNT_TYPES, COST_PRESETS, EDUCATION_STAGES, RETURN_KEY_LABELS, findStage,
+  ACCOUNT_TYPES, COST_PRESETS, RETURN_KEY_LABELS, findStage,
 } from '../engine/masters'
+import {
+  AFTER_STAGE_IDS, BASIC_STAGE_IDS, NONE, defaultChildPlan, gradAllowed, planFromSteps, stepsFromPlan, type ChildPlan,
+} from '../engine/education'
+import { annuityPayment, loanStateAt } from '../engine/loan'
 import { DEFAULT_INCOME_CURVE } from '../engine/sample'
-import type { AccountTypeId, Household, Person, ReturnKey } from '../engine/types'
+import { estimateGrossFromNet } from '../engine/tax'
+import type { AccountTypeId, Household, Loan, Person, ReturnKey } from '../engine/types'
 import { exportJson, importJson } from '../storage'
 import { CheckField, ManField, NumField, PctField, SelectField, TextField } from './fields'
 import { newId } from './format'
@@ -49,13 +54,13 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
       <details className="section">
         <summary>大人（収入・年金）</summary>
         <div className="body">
-          {adults.map((p) => <AdultEditor key={p.id} p={p} update={(fn) => update((d) => fn(d.persons[personIndex(p.id)]))} remove={() => update((d) => { d.persons = d.persons.filter((x) => x.id !== p.id) })} />)}
+          {adults.map((p) => <AdultEditor key={p.id} p={p} startYear={h.startYear} update={(fn) => update((d) => fn(d.persons[personIndex(p.id)]))} remove={() => update((d) => { d.persons = d.persons.filter((x) => x.id !== p.id) })} />)}
           <div className="row-actions">
             <button className="btn small" onClick={() => update((d) => {
               d.persons.push({
                 id: newId('p'), nickname: `大人${adults.length + 1}`, role: 'adult', birthYear: d.startYear - 30,
                 income: {
-                  netAnnual: 4_000_000, grossAnnual: 5_200_000, incomeCurve: DEFAULT_INCOME_CURVE.map((s) => ({ ...s })),
+                  netAnnual: 4_000_000, incomeCurve: DEFAULT_INCOME_CURVE.map((s) => ({ ...s })),
                   retireAge: 65, sideIncome: null, reducedPeriods: [], pension: { recordedEmployee: 0, startAge: 65 }, severance: null,
                 },
               })
@@ -72,10 +77,7 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
             <button className="btn small" onClick={() => update((d) => {
               d.persons.push({
                 id: newId('c'), nickname: `子ども${children.length + 1}`, role: 'child', birthYear: d.startYear,
-                education: ['kindergarten', 'elementary', 'juniorHigh', 'highSchool'].map((sid) => {
-                  const s = findStage(sid)!
-                  return { stageId: sid, typeId: 'public', startAge: s.defaultStartAge, years: s.defaultYears, livingAway: false }
-                }).concat([{ stageId: 'university', typeId: 'national', startAge: 18, years: 4, livingAway: false }]),
+                education: stepsFromPlan(defaultChildPlan()),
               })
             })}>＋ 子どもを追加</button>
           </div>
@@ -125,9 +127,11 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
               <div className="fields">
                 <TextField label="名前" value={l.name} onChange={(v) => update((d) => { d.loans[i].name = v })} />
                 <SelectField label="名義人" value={l.ownerId ?? ''} options={ownerOptions} onChange={(v) => update((d) => { d.loans[i].ownerId = v || null })} />
-                <ManField label="今の残高" value={l.balance} onChange={(v) => update((d) => { d.loans[i].balance = v ?? 0 })} />
-                <NumField label="残りの返済期間" unit="か月" value={l.remainingMonths} onChange={(v) => update((d) => { d.loans[i].remainingMonths = Math.round(v ?? 0) })} hint={`約${(l.remainingMonths / 12).toFixed(1)}年`} />
-                <PctField label="今の金利" value={l.rate} onChange={(v) => update((d) => { d.loans[i].rate = v ?? 0 })} />
+                <ManField label="借りた額" value={l.principal} onChange={(v) => update((d) => { d.loans[i].principal = v ?? 0 })} />
+                <NumField label="借りた年" unit="年" value={l.borrowYear} onChange={(v) => update((d) => { d.loans[i].borrowYear = v ?? d.startYear })} hint="これから借りる予定の年でもよい" />
+                <NumField label="返済期間" unit="年" value={l.termYears} onChange={(v) => update((d) => { d.loans[i].termYears = Math.max(0, v ?? 35) })} />
+                <PctField label="金利" value={l.rate} onChange={(v) => update((d) => { d.loans[i].rate = v ?? 0 })} hint="今の金利" />
+                <LoanSummary loan={l} startYear={h.startYear} />
                 <CheckField label="変動金利（シナリオの金利上昇を足す）" checked={l.followsMarketRate} onChange={(v) => update((d) => { d.loans[i].followsMarketRate = v })} />
               </div>
               <div className="flabel" style={{ fontSize: 12, color: 'var(--ink-2)', margin: '12px 0 6px' }}>決まっている金利の変更</div>
@@ -143,11 +147,11 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
                 <button className="btn small" onClick={() => update((d) => { d.loans[i].rateChanges.push({ year: d.startYear + 1, month: 1, rate: d.loans[i].rate }) })}>＋ 金利の変更を追加</button>
               </div>
               <CheckField label="住宅ローン控除を受けている" checked={!!l.deduction} onChange={(v) => update((d) => {
-                d.loans[i].deduction = v ? { untilYear: d.startYear + 10, maxBalance: 30_000_000, currentAmount: null } : null
+                d.loans[i].deduction = v ? { untilYear: d.loans[i].borrowYear + 12, maxBalance: 30_000_000, currentAmount: null } : null
               })} />
               {l.deduction && (
                 <div className="fields">
-                  <NumField label="控除を受けられる最後の年" unit="年" value={l.deduction.untilYear} onChange={(v) => update((d) => { d.loans[i].deduction!.untilYear = v ?? d.startYear })} />
+                  <NumField label="控除を受けられる最後の年" unit="年" hint="新築は入居から13年、中古は10年" value={l.deduction.untilYear} onChange={(v) => update((d) => { d.loans[i].deduction!.untilYear = v ?? d.startYear })} />
                   <ManField label="控除の対象になる残高の上限" value={l.deduction.maxBalance} onChange={(v) => update((d) => { d.loans[i].deduction!.maxBalance = v ?? 0 })} />
                   <ManField label="今年の控除額" value={l.deduction.currentAmount} allowEmpty onChange={(v) => update((d) => { d.loans[i].deduction!.currentAmount = v })}
                     hint="源泉徴収票の「住宅借入金等特別控除の額」＋住民税の減額分。空欄なら自動計算" wide />
@@ -157,7 +161,7 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
           ))}
           <div className="row-actions">
             <button className="btn small" onClick={() => update((d) => {
-              d.loans.push({ id: newId('loan'), name: '住宅ローン', kind: 'mortgage', ownerId: adults[0]?.id ?? null, balance: 20_000_000, remainingMonths: 360, rate: 0.01, rateChanges: [], followsMarketRate: true, deduction: null })
+              d.loans.push({ id: newId('loan'), name: '住宅ローン', kind: 'mortgage', ownerId: adults[0]?.id ?? null, principal: 30_000_000, borrowYear: d.startYear, termYears: 35, rate: 0.01, rateChanges: [], followsMarketRate: true, deduction: null })
             })}>＋ ローンを追加</button>
           </div>
           <p className="note">ペアローンは名義人ごとに1本ずつ登録します。</p>
@@ -262,7 +266,7 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
   )
 }
 
-function AdultEditor({ p, update, remove }: { p: Person; update: (fn: (p: Person) => void) => void; remove: () => void }) {
+function AdultEditor({ p, startYear, update, remove }: { p: Person; startYear: number; update: (fn: (p: Person) => void) => void; remove: () => void }) {
   const inc = p.income!
   return (
     <div className="sub-card">
@@ -273,8 +277,8 @@ function AdultEditor({ p, update, remove }: { p: Person; update: (fn: (p: Person
       <div className="fields">
         <TextField label="ニックネーム" value={p.nickname} onChange={(v) => update((x) => { x.nickname = v })} />
         <NumField label="生まれた年" unit="年" value={p.birthYear} onChange={(v) => update((x) => { x.birthYear = v ?? x.birthYear })} />
-        <ManField label="手取り年収" value={inc.netAnnual} onChange={(v) => update((x) => { x.income!.netAnnual = v ?? 0 })} hint="ボーナス込み" />
-        <ManField label="額面年収" value={inc.grossAnnual} onChange={(v) => update((x) => { x.income!.grossAnnual = v ?? 0 })} hint="年金の推計に使う" />
+        <ManField label="手取り年収" value={inc.netAnnual} onChange={(v) => update((x) => { x.income!.netAnnual = v ?? 0 })}
+          hint={`ボーナス込み。額面は約${Math.round(estimateGrossFromNet(inc.netAnnual, startYear - p.birthYear) / 10_000)}万円と推定（年金の計算に使う）`} />
         <NumField label="退職年齢" unit="歳" value={inc.retireAge} onChange={(v) => update((x) => { x.income!.retireAge = v ?? 65 })} />
         <NumField label="年金の受給開始" unit="歳" value={inc.pension.startAge} onChange={(v) => update((x) => { x.income!.pension.startAge = Math.min(75, Math.max(60, v ?? 65)) })} hint="60〜75歳" />
         <ManField label="厚生年金の加入実績額" value={inc.pension.recordedEmployee} onChange={(v) => update((x) => { x.income!.pension.recordedEmployee = v ?? 0 })} hint="ねんきん定期便「これまでの加入実績に応じた年金額」の老齢厚生年金（年額）" wide />
@@ -313,7 +317,27 @@ function AdultEditor({ p, update, remove }: { p: Person; update: (fn: (p: Person
 }
 
 function ChildEditor({ p, update, remove }: { p: Person; update: (fn: (p: Person) => void) => void; remove: () => void }) {
-  const steps = p.education ?? []
+  const plan = planFromSteps(p.education ?? [])
+  const setPlan = (fn: (plan: ChildPlan) => void) => update((x) => {
+    const next = planFromSteps(x.education ?? [])
+    fn(next)
+    x.education = stepsFromPlan(next)
+  })
+  const typeLabel = (stageId: string, typeId: string) => {
+    const t = findStage(stageId)!.types[typeId]
+    const cost = t.annual + t.enrollment > 0 ? `（年${Math.round(t.annual / 10_000)}万）` : ''
+    return `${t.label}${cost}`
+  }
+  const afterOptions = [{ value: NONE, label: '進学しない（就職）' }, ...AFTER_STAGE_IDS.flatMap((sid) => {
+    const st = findStage(sid)!
+    return Object.keys(st.types).map((tid) => ({ value: `${sid}:${tid}`, label: `${st.label}・${typeLabel(sid, tid)}` }))
+  })]
+  const gradOptions = [{ value: NONE, label: '進学しない' }, ...['master', 'doctor'].flatMap((sid) => {
+    const st = findStage(sid)!
+    const level = sid === 'master' ? '修士まで（2年）' : '博士まで（5年）'
+    return Object.keys(st.types).map((tid) => ({ value: `${sid}:${tid}`, label: `${level}・${st.types[tid].label}` }))
+  })]
+
   return (
     <div className="sub-card">
       <div className="sub-head">
@@ -324,34 +348,43 @@ function ChildEditor({ p, update, remove }: { p: Person; update: (fn: (p: Person
         <TextField label="ニックネーム" value={p.nickname} onChange={(v) => update((x) => { x.nickname = v })} />
         <NumField label="生まれた年" unit="年" value={p.birthYear} onChange={(v) => update((x) => { x.birthYear = v ?? x.birthYear })} />
       </div>
-      <div className="flabel" style={{ fontSize: 12, color: 'var(--ink-2)', margin: '12px 0 6px' }}>進路</div>
-      {steps.map((s, si) => {
-        const stage = findStage(s.stageId)
-        const typeOptions = Object.entries(stage?.types ?? {}).map(([k, v]) => ({ value: k, label: `${v.label}（年${Math.round(v.annual / 10_000)}万）` }))
-        return (
-          <div key={si} style={{ borderTop: si ? '1px solid var(--grid)' : undefined, paddingTop: si ? 8 : 0, marginBottom: 8 }}>
-            <div className="fields">
-              <SelectField label="段階" value={s.stageId} options={EDUCATION_STAGES.map((st) => ({ value: st.id, label: st.label }))} onChange={(v) => update((x) => {
-                const st = findStage(v)!
-                x.education![si] = { ...x.education![si], stageId: v, typeId: Object.keys(st.types)[0], startAge: st.defaultStartAge, years: st.defaultYears }
-              })} />
-              <SelectField label="区分" value={s.typeId} options={typeOptions} onChange={(v) => update((x) => { x.education![si].typeId = v })} />
-              <NumField label="開始年齢" unit="歳" value={s.startAge} onChange={(v) => update((x) => { x.education![si].startAge = v ?? 0 })} />
-              <NumField label="年数" unit="年" value={s.years} onChange={(v) => update((x) => { x.education![si].years = Math.max(0, Math.round(v ?? 0)) })} />
-              <CheckField label="一人暮らし（仕送り）" checked={s.livingAway} onChange={(v) => update((x) => { x.education![si].livingAway = v })} />
-            </div>
-            <div className="row-actions" style={{ marginTop: 0 }}>
-              <button className="btn small danger" onClick={() => update((x) => { x.education!.splice(si, 1) })}>この段階を削除</button>
-            </div>
-          </div>
-        )
-      })}
-      <div className="row-actions">
-        <button className="btn small" onClick={() => update((x) => {
-          const st = findStage('master')!
-          ;(x.education ??= []).push({ stageId: st.id, typeId: Object.keys(st.types)[0], startAge: st.defaultStartAge, years: st.defaultYears, livingAway: false })
-        })}>＋ 段階を追加</button>
+      <div className="flabel" style={{ fontSize: 12, color: 'var(--ink-2)', margin: '12px 0 6px' }}>進路（年齢と年数は自動で決まります）</div>
+      <div className="fields">
+        {BASIC_STAGE_IDS.map((sid) => {
+          const st = findStage(sid)!
+          return (
+            <SelectField key={sid} label={st.label} value={plan.basic[sid]}
+              options={Object.keys(st.types).map((tid) => ({ value: tid, label: typeLabel(sid, tid) }))}
+              onChange={(v) => setPlan((x) => { x.basic[sid] = v })} />
+          )
+        })}
+        <SelectField label="高校のあと" value={plan.after} options={afterOptions} wide
+          onChange={(v) => setPlan((x) => { x.after = v; if (!gradAllowed(x)) x.grad = NONE })} />
+        {gradAllowed(plan) && (
+          <SelectField label="大学院" value={plan.grad} options={gradOptions} wide onChange={(v) => setPlan((x) => { x.grad = v })} />
+        )}
+        {plan.after !== NONE && (
+          <CheckField label="高校のあとは一人暮らし（仕送り）" checked={plan.livingAway} onChange={(v) => setPlan((x) => { x.livingAway = v })} />
+        )}
       </div>
     </div>
   )
+}
+
+/** 借りた額などから計算した、今年はじめの残高と毎月の返済額 */
+function LoanSummary({ loan, startYear }: { loan: Loan; startYear: number }) {
+  const total = Math.round(loan.termYears * 12)
+  const monthly = annuityPayment(loan.principal, loan.rate / 12, total)
+  const endYear = loan.borrowYear + Math.ceil(loan.termYears) - 1
+  const man = (v: number) => `${Math.round(v / 10_000).toLocaleString()}万円`
+  let text: string
+  if (loan.principal <= 0 || total <= 0) text = '借りた額と返済期間を入れてください'
+  else if (loan.borrowYear > startYear) text = `${loan.borrowYear}年から返済開始・毎月 約${(monthly / 10_000).toFixed(1)}万円・${endYear}年に完済`
+  else {
+    const { balance } = loanStateAt(loan, startYear)
+    text = balance <= 0
+      ? '完済済み'
+      : `${startYear}年はじめの残高 約${man(balance)}・毎月 約${(monthly / 10_000).toFixed(1)}万円・${endYear}年に完済`
+  }
+  return <p className="note" style={{ gridColumn: '1 / -1', margin: 0 }}>{text}</p>
 }

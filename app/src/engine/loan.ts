@@ -14,6 +14,20 @@ export function annuityPayment(balance: number, monthlyRate: number, months: num
   return (balance * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months))
 }
 
+/** 借りた額から、ある年の1月時点の残高と残りの返済回数を求める（元利均等・今の金利で計算） */
+export function loanStateAt(loan: Loan, year: number): { balance: number; remainingMonths: number } {
+  const total = Math.round(loan.termYears * 12)
+  const paid = Math.max(0, (year - loan.borrowYear) * 12)
+  if (paid >= total) return { balance: 0, remainingMonths: 0 }
+  const r = loan.rate / 12
+  if (paid === 0) return { balance: loan.principal, remainingMonths: total }
+  if (r === 0) return { balance: loan.principal * (1 - paid / total), remainingMonths: total - paid }
+  const monthly = annuityPayment(loan.principal, r, total)
+  const g = Math.pow(1 + r, paid)
+  const balance = loan.principal * g - (monthly * (g - 1)) / r
+  return { balance: Math.max(0, balance), remainingMonths: total - paid }
+}
+
 /** 決まっている変更の後に、シナリオの上昇幅を足した年利 */
 export function rateAt(loan: Loan, scenario: Scenario, startYear: number, year: number, month: number): number {
   let rate = loan.rate
@@ -32,16 +46,21 @@ export function rateAt(loan: Loan, scenario: Scenario, startYear: number, year: 
 
 /**
  * ローンを月ごとに返済し、年ごとにまとめる。
+ * 借りた年が未来なら、その年から返済が始まる。
  * 金利が変わった月から、その時点の残高と残り回数で返済額を計算し直す（5年ルール・125%ルールは使わない）。
  */
 export function loanSchedule(loan: Loan, scenario: Scenario, startYear: number, endYear: number): Map<number, LoanYear> {
   const out = new Map<number, LoanYear>()
-  let balance = loan.balance
-  let remaining = loan.remainingMonths
+  const firstYear = Math.max(startYear, loan.borrowYear)
+  let { balance, remainingMonths: remaining } = loanStateAt(loan, firstYear)
   let currentRate: number | null = null
   let monthly = 0
   for (let year = startYear; year <= endYear; year++) {
     let payment = 0
+    if (year < firstYear) {
+      out.set(year, { payment: 0, endBalance: 0, rate: loan.rate })
+      continue
+    }
     for (let month = 1; month <= 12; month++) {
       if (remaining <= 0 || balance <= 0) break
       const rate = rateAt(loan, scenario, startYear, year, month)

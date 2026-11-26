@@ -1,4 +1,5 @@
 import { sampleHousehold } from './engine/sample'
+import { migrateHousehold } from './engine/migrate'
 import type { Household } from './engine/types'
 
 // 個人データはこの端末のブラウザにだけ保存する（リポジトリには含めない）。
@@ -11,7 +12,7 @@ export function loadHousehold(): { household: Household; isSample: boolean } {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Household
-      if (parsed?.version === 1) return { household: parsed, isSample: false }
+      if (parsed?.version === 1) return { household: migrateHousehold(parsed), isSample: false }
     }
   } catch {
     // 読めない場合はサンプルで始める
@@ -48,5 +49,5 @@ export function exportJson(h: Household): void {
 export async function importJson(file: File): Promise<Household> {
   const parsed = JSON.parse(await file.text()) as Household
   if (parsed?.version !== 1 || !Array.isArray(parsed.persons)) throw new Error('形式が正しくありません')
-  return parsed
+  return migrateHousehold(parsed)
 }

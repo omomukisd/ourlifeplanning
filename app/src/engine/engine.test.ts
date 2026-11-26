@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { annuityPayment, loanSchedule } from './loan'
+import { defaultChildPlan, planFromSteps, stepsFromPlan } from './education'
+import { annuityPayment, loanSchedule, loanStateAt } from './loan'
+import { migrateHousehold } from './migrate'
+import { estimateGrossFromNet, netFromGross } from './tax'
 import { DEFAULT_SCENARIOS } from './masters'
 import { sampleHousehold } from './sample'
 import { simulate } from './simulate'
@@ -20,7 +23,7 @@ function docExample(): Household {
     persons: [{
       id: 'a', nickname: 'A', role: 'adult', birthYear: Y0 - 40,
       income: {
-        netAnnual: 5_000_000, grossAnnual: 6_500_000, incomeCurve: [{ fromAge: 0, growth: null }],
+        netAnnual: 5_000_000, incomeCurve: [{ fromAge: 0, growth: null }],
         retireAge: 65, sideIncome: null, reducedPeriods: [],
         pension: { recordedEmployee: 0, startAge: 65 }, severance: null,
       },
@@ -39,7 +42,7 @@ function docExample(): Household {
 }
 
 const mortgage = (over: Partial<Loan> = {}): Loan => ({
-  id: 'l', name: 'loan', kind: 'mortgage', ownerId: 'a', balance: 30_000_000, remainingMonths: 360,
+  id: 'l', name: 'loan', kind: 'mortgage', ownerId: 'a', principal: 30_000_000, borrowYear: Y0, termYears: 30,
   rate: 0.01, rateChanges: [], followsMarketRate: false, deduction: null, ...over,
 })
 
@@ -79,7 +82,7 @@ describe('ローン', () => {
   })
 
   it('完済後は返済 0', () => {
-    const s = loanSchedule(mortgage({ remainingMonths: 12, balance: 1_200_000 }), flat, Y0, Y0 + 2)
+    const s = loanSchedule(mortgage({ termYears: 1, principal: 1_200_000 }), flat, Y0, Y0 + 2)
     expect(s.get(Y0)!.endBalance).toBeCloseTo(0)
     expect(s.get(Y0 + 1)!.payment).toBe(0)
   })
@@ -143,5 +146,76 @@ describe('3つの問い', () => {
     // 65歳同士で退職できるなら、最短の年も見つかる
     const last = ans.cells[ans.cells.length - 1][ans.cells[0].length - 1]
     if (last.goalMet) expect(ans.earliestSameYear).not.toBeNull()
+  })
+})
+
+describe('額面の推定', () => {
+  it('手取りから額面を逆算すると、額面→手取りの計算と一致する', () => {
+    for (const net of [2_500_000, 3_600_000, 4_800_000, 7_000_000, 10_000_000]) {
+      const gross = estimateGrossFromNet(net, 35)
+      expect(Math.abs(netFromGross(gross, 35) - net)).toBeLessThan(2_000)
+    }
+  })
+
+  it('一般的な目安（手取りは額面の75〜80%程度）に収まる', () => {
+    const gross = estimateGrossFromNet(4_800_000, 35)
+    expect(gross).toBeGreaterThan(6_000_000)
+    expect(gross).toBeLessThan(6_600_000)
+  })
+
+  it('40歳以上は介護保険の分だけ額面が高く出る', () => {
+    expect(estimateGrossFromNet(4_800_000, 45)).toBeGreaterThan(estimateGrossFromNet(4_800_000, 35))
+  })
+})
+
+describe('借りた額からのローン', () => {
+  it('3年前に借りたローンは、今年はじめに36回返済済みの残高から始まる', () => {
+    const loan = mortgage({ borrowYear: Y0 - 3 })
+    const state = loanStateAt(loan, Y0)
+    expect(state.remainingMonths).toBe(360 - 36)
+    // 1年ずつ返済した結果と一致する
+    const fromStart = loanSchedule(mortgage({ borrowYear: Y0 - 3 }), flat, Y0 - 3, Y0 - 1).get(Y0 - 1)!
+    expect(state.balance).toBeCloseTo(fromStart.endBalance, 0)
+  })
+
+  it('未来に借りる予定のローンは、その年から返済が始まる', () => {
+    const s = loanSchedule(mortgage({ borrowYear: Y0 + 2 }), flat, Y0, Y0 + 3)
+    expect(s.get(Y0)!.payment).toBe(0)
+    expect(s.get(Y0 + 1)!.endBalance).toBe(0)
+    expect(Math.round(s.get(Y0 + 2)!.payment)).toBe(1_157_902)
+  })
+
+  it('返済期間を過ぎたローンは返済 0', () => {
+    const s = loanSchedule(mortgage({ borrowYear: Y0 - 31 }), flat, Y0, Y0 + 1)
+    expect(s.get(Y0)!.payment).toBe(0)
+  })
+
+  it('旧形式（残高・残りの月数）のデータを読み替えても、返済は変わらない', () => {
+    const h = docExample()
+    ;(h.loans as unknown[]) = [{ ...mortgage(), principal: undefined, borrowYear: undefined, termYears: undefined, balance: 30_000_000, remainingMonths: 360 }]
+    const m = migrateHousehold(h)
+    expect(m.loans[0]).toMatchObject({ principal: 30_000_000, borrowYear: Y0, termYears: 30 })
+    expect(Math.round(loanSchedule(m.loans[0], flat, Y0, Y0).get(Y0)!.payment)).toBe(1_157_902)
+  })
+})
+
+describe('子どもの進路', () => {
+  it('選択から段階を作ると、年齢と年数はマスタの標準値になる', () => {
+    const steps = stepsFromPlan({ ...defaultChildPlan(), after: 'university6:national', grad: 'doctor:private', livingAway: true })
+    expect(steps.map((s) => [s.stageId, s.startAge, s.years])).toEqual([
+      ['kindergarten', 3, 3], ['elementary', 6, 6], ['juniorHigh', 12, 3], ['highSchool', 15, 3],
+      ['university6', 18, 6], ['master', 24, 2], ['doctor', 26, 3],
+    ])
+    expect(steps.filter((s) => s.livingAway).map((s) => s.stageId)).toEqual(['university6', 'master', 'doctor'])
+  })
+
+  it('段階から選択に戻すと元の選択になる', () => {
+    const plan = { ...defaultChildPlan(), basic: { ...defaultChildPlan().basic, nursery: 'licensed', elementary: 'private' }, after: 'vocational:private' }
+    expect(planFromSteps(stepsFromPlan(plan))).toEqual(plan)
+  })
+
+  it('専門学校や就職を選ぶと大学院は付かない', () => {
+    const steps = stepsFromPlan({ ...defaultChildPlan(), after: 'vocational:private', grad: 'master:national' })
+    expect(steps.some((s) => s.stageId === 'master')).toBe(false)
   })
 })
