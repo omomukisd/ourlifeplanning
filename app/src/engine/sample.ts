@@ -52,7 +52,7 @@ export function sampleHousehold(startYear = new Date().getFullYear()): Household
     loans: [
       {
         id: 'loan1', name: '住宅ローン（あおい）', kind: 'mortgage', ownerId: 'a1',
-        principal: 30_000_000, borrowYear: startYear - 3, termYears: 35, rate: 0.009,
+        principal: 30_000_000, borrowYear: startYear - 3, borrowMonth: 3, termYears: 35, rate: 0.009,
         rateChanges: [], followsMarketRate: true,
         deduction: { untilYear: startYear - 3 + 12, maxBalance: 30_000_000, currentAmount: null },
       },

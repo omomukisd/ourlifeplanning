@@ -114,7 +114,8 @@ erDiagram
 | kind | `mortgage` / `car` / `other` | |
 | ownerId | 人のid | 名義人 |
 | principal | 円 | 借りた額 |
-| borrowYear | 年 | 借りた年（その年の1月から返済開始とみなす）。未来の年なら、その年から返済が始まる |
+| borrowYear | 年 | 借りた年。未来の年でもよい（借りるまでは残高・返済とも 0） |
+| borrowMonth | 月 | 借りた月（1〜12）。翌月から返済が始まる |
 | termYears | 年 | 返済期間。今年はじめの残高と残りの回数は、借りた額・期間・今の金利から元利均等で計算する |
 | method | `annuity` | 元利均等（MVPはこれだけ） |
 | rateChanges | `[{ fromYearMonth, rate }]` | 決まっている金利の変更 |

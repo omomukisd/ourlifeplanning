@@ -7,9 +7,9 @@ type LegacyLoan = Partial<Loan> & { balance?: number; remainingMonths?: number }
 export function migrateHousehold(h: Household): Household {
   const loans = (h.loans as LegacyLoan[]).map((l) => {
     if (typeof l.principal === 'number') return l as Loan
-    // 旧形式（今の残高・残りの月数）：今年借りた扱いにすると、今年以降の返済はまったく同じになる
+    // 旧形式（今の残高・残りの月数）：前年12月に借りた扱い（＝今年1月から返済）にすると、今年以降の返済はまったく同じになる
     const { balance = 0, remainingMonths = 0, ...rest } = l
-    return { ...rest, principal: balance, borrowYear: h.startYear, termYears: remainingMonths / 12 } as Loan
+    return { ...rest, principal: balance, borrowYear: h.startYear - 1, borrowMonth: 12, termYears: remainingMonths / 12 } as Loan
   })
   const persons = h.persons.map((p) => {
     if (!p.income || !('grossAnnual' in p.income)) return p

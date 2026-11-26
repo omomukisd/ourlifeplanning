@@ -93,8 +93,10 @@ export interface Loan {
   ownerId: string | null
   /** 借りた額 */
   principal: Yen
-  /** 借りた年（その年の1月から返済が始まるものとする。未来の年なら、その年から返済が始まる） */
+  /** 借りた年（未来の年でもよい） */
   borrowYear: number
+  /** 借りた月（1〜12）。翌月から返済が始まる。古いデータにはないので、なければ1月とみなす */
+  borrowMonth?: number
   /** 返済期間（年） */
   termYears: number
   /** 今の年利（借りた年から今年までの返済も、この金利で計算する） */

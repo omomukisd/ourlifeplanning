@@ -6,7 +6,7 @@ import {
 import {
   AFTER_STAGE_IDS, BASIC_STAGE_IDS, NONE, defaultChildPlan, gradAllowed, planFromSteps, stepsFromPlan, type ChildPlan,
 } from '../engine/education'
-import { annuityPayment, loanStateAt } from '../engine/loan'
+import { annuityPayment, borrowMonthOf, firstPaymentIndex, lastPayment, loanStateAt } from '../engine/loan'
 import { DEFAULT_INCOME_CURVE } from '../engine/sample'
 import { estimateGrossFromNet } from '../engine/tax'
 import type { AccountTypeId, Household, Loan, Person, ReturnKey } from '../engine/types'
@@ -128,8 +128,9 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
                 <TextField label="名前" value={l.name} onChange={(v) => update((d) => { d.loans[i].name = v })} />
                 <SelectField label="名義人" value={l.ownerId ?? ''} options={ownerOptions} onChange={(v) => update((d) => { d.loans[i].ownerId = v || null })} />
                 <ManField label="借りた額" value={l.principal} onChange={(v) => update((d) => { d.loans[i].principal = v ?? 0 })} />
-                <NumField label="借りた年" unit="年" value={l.borrowYear} onChange={(v) => update((d) => { d.loans[i].borrowYear = v ?? d.startYear })} hint="これから借りる予定の年でもよい" />
                 <NumField label="返済期間" unit="年" value={l.termYears} onChange={(v) => update((d) => { d.loans[i].termYears = Math.max(0, v ?? 35) })} />
+                <NumField label="借りた年" unit="年" value={l.borrowYear} onChange={(v) => update((d) => { d.loans[i].borrowYear = v ?? d.startYear })} hint="これから借りる予定でもよい" />
+                <NumField label="借りた月" unit="月" value={borrowMonthOf(l)} onChange={(v) => update((d) => { d.loans[i].borrowMonth = Math.min(12, Math.max(1, Math.round(v ?? 1))) })} hint="翌月から返済" />
                 <PctField label="金利" value={l.rate} onChange={(v) => update((d) => { d.loans[i].rate = v ?? 0 })} hint="今の金利" />
                 <LoanSummary loan={l} startYear={h.startYear} />
                 <CheckField label="変動金利（シナリオの金利上昇を足す）" checked={l.followsMarketRate} onChange={(v) => update((d) => { d.loans[i].followsMarketRate = v })} />
@@ -161,7 +162,7 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
           ))}
           <div className="row-actions">
             <button className="btn small" onClick={() => update((d) => {
-              d.loans.push({ id: newId('loan'), name: '住宅ローン', kind: 'mortgage', ownerId: adults[0]?.id ?? null, principal: 30_000_000, borrowYear: d.startYear, termYears: 35, rate: 0.01, rateChanges: [], followsMarketRate: true, deduction: null })
+              d.loans.push({ id: newId('loan'), name: '住宅ローン', kind: 'mortgage', ownerId: adults[0]?.id ?? null, principal: 30_000_000, borrowYear: d.startYear, borrowMonth: new Date().getMonth() + 1, termYears: 35, rate: 0.01, rateChanges: [], followsMarketRate: true, deduction: null })
             })}>＋ ローンを追加</button>
           </div>
           <p className="note">ペアローンは名義人ごとに1本ずつ登録します。</p>
@@ -353,7 +354,7 @@ function ChildEditor({ p, update, remove }: { p: Person; update: (fn: (p: Person
         {BASIC_STAGE_IDS.map((sid) => {
           const st = findStage(sid)!
           return (
-            <SelectField key={sid} label={st.label} value={plan.basic[sid]}
+            <SelectField key={sid} label={st.label} value={plan.basic[sid]} wide
               options={Object.keys(st.types).map((tid) => ({ value: tid, label: typeLabel(sid, tid) }))}
               onChange={(v) => setPlan((x) => { x.basic[sid] = v })} />
           )
@@ -375,16 +376,19 @@ function ChildEditor({ p, update, remove }: { p: Person; update: (fn: (p: Person
 function LoanSummary({ loan, startYear }: { loan: Loan; startYear: number }) {
   const total = Math.round(loan.termYears * 12)
   const monthly = annuityPayment(loan.principal, loan.rate / 12, total)
-  const endYear = loan.borrowYear + Math.ceil(loan.termYears) - 1
+  const first = firstPaymentIndex(loan)
+  const last = lastPayment(loan)
+  const ym = (y: number, m: number) => `${y}年${m}月`
+  const perMonth = `毎月 約${(monthly / 10_000).toFixed(1)}万円`
   const man = (v: number) => `${Math.round(v / 10_000).toLocaleString()}万円`
   let text: string
   if (loan.principal <= 0 || total <= 0) text = '借りた額と返済期間を入れてください'
-  else if (loan.borrowYear > startYear) text = `${loan.borrowYear}年から返済開始・毎月 約${(monthly / 10_000).toFixed(1)}万円・${endYear}年に完済`
+  else if (first > startYear * 12) text = `${ym(Math.floor(first / 12), (first % 12) + 1)}から返済開始・${perMonth}・${ym(last.year, last.month)}に完済`
   else {
     const { balance } = loanStateAt(loan, startYear)
     text = balance <= 0
       ? '完済済み'
-      : `${startYear}年はじめの残高 約${man(balance)}・毎月 約${(monthly / 10_000).toFixed(1)}万円・${endYear}年に完済`
+      : `${startYear}年はじめの残高 約${man(balance)}・${perMonth}・${ym(last.year, last.month)}に完済`
   }
   return <p className="note" style={{ gridColumn: '1 / -1', margin: 0 }}>{text}</p>
 }

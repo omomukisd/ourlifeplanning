@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultChildPlan, planFromSteps, stepsFromPlan } from './education'
-import { annuityPayment, loanSchedule, loanStateAt } from './loan'
+import { annuityPayment, lastPayment, loanSchedule, loanStateAt } from './loan'
 import { migrateHousehold } from './migrate'
 import { estimateGrossFromNet, netFromGross } from './tax'
 import { DEFAULT_SCENARIOS } from './masters'
@@ -42,7 +42,7 @@ function docExample(): Household {
 }
 
 const mortgage = (over: Partial<Loan> = {}): Loan => ({
-  id: 'l', name: 'loan', kind: 'mortgage', ownerId: 'a', principal: 30_000_000, borrowYear: Y0, termYears: 30,
+  id: 'l', name: 'loan', kind: 'mortgage', ownerId: 'a', principal: 30_000_000, borrowYear: Y0 - 1, borrowMonth: 12, termYears: 30,
   rate: 0.01, rateChanges: [], followsMarketRate: false, deduction: null, ...over,
 })
 
@@ -170,18 +170,27 @@ describe('額面の推定', () => {
 
 describe('借りた額からのローン', () => {
   it('3年前に借りたローンは、今年はじめに36回返済済みの残高から始まる', () => {
-    const loan = mortgage({ borrowYear: Y0 - 3 })
+    const loan = mortgage({ borrowYear: Y0 - 4 })
     const state = loanStateAt(loan, Y0)
     expect(state.remainingMonths).toBe(360 - 36)
     // 1年ずつ返済した結果と一致する
-    const fromStart = loanSchedule(mortgage({ borrowYear: Y0 - 3 }), flat, Y0 - 3, Y0 - 1).get(Y0 - 1)!
+    const fromStart = loanSchedule(loan, flat, Y0 - 3, Y0 - 1).get(Y0 - 1)!
     expect(state.balance).toBeCloseTo(fromStart.endBalance, 0)
   })
 
-  it('未来に借りる予定のローンは、その年から返済が始まる', () => {
-    const s = loanSchedule(mortgage({ borrowYear: Y0 + 2 }), flat, Y0, Y0 + 3)
+  it('借りた翌月から返済が始まる（4月に借りたら、その年は5〜12月の8回）', () => {
+    const loan = mortgage({ borrowYear: Y0, borrowMonth: 4 })
+    const y = loanSchedule(loan, flat, Y0, Y0).get(Y0)!
+    expect(y.payment).toBeCloseTo(annuityPayment(30_000_000, 0.01 / 12, 360) * 8, 0)
+    expect(lastPayment(loan)).toEqual({ year: Y0 + 30, month: 4 })
+  })
+
+  it('未来に借りる予定のローンは、借りるまで残高も返済も 0', () => {
+    const s = loanSchedule(mortgage({ borrowYear: Y0 + 1 }), flat, Y0, Y0 + 3)
     expect(s.get(Y0)!.payment).toBe(0)
-    expect(s.get(Y0 + 1)!.endBalance).toBe(0)
+    expect(s.get(Y0)!.endBalance).toBe(0)
+    expect(s.get(Y0 + 1)!.payment).toBe(0)
+    expect(s.get(Y0 + 1)!.endBalance).toBe(30_000_000)
     expect(Math.round(s.get(Y0 + 2)!.payment)).toBe(1_157_902)
   })
 
@@ -192,9 +201,9 @@ describe('借りた額からのローン', () => {
 
   it('旧形式（残高・残りの月数）のデータを読み替えても、返済は変わらない', () => {
     const h = docExample()
-    ;(h.loans as unknown[]) = [{ ...mortgage(), principal: undefined, borrowYear: undefined, termYears: undefined, balance: 30_000_000, remainingMonths: 360 }]
+    ;(h.loans as unknown[]) = [{ ...mortgage(), principal: undefined, borrowYear: undefined, borrowMonth: undefined, termYears: undefined, balance: 30_000_000, remainingMonths: 360 }]
     const m = migrateHousehold(h)
-    expect(m.loans[0]).toMatchObject({ principal: 30_000_000, borrowYear: Y0, termYears: 30 })
+    expect(m.loans[0]).toMatchObject({ principal: 30_000_000, borrowYear: Y0 - 1, borrowMonth: 12, termYears: 30 })
     expect(Math.round(loanSchedule(m.loans[0], flat, Y0, Y0).get(Y0)!.payment)).toBe(1_157_902)
   })
 })
