@@ -1,3 +1,5 @@
+import type { PensionDetail } from './pension'
+
 // 金額はすべて円。率は小数（0.02 = 2%）。
 // 「今の価値」と書いた金額は、シミュレーション開始年の物価での金額。
 
@@ -51,8 +53,10 @@ export interface IncomeProfile {
   sideIncome: { netAnnual: Yen; untilAge: number } | null
   reducedPeriods: { fromYear: number; toYear: number; ratio: number }[]
   pension: {
-    /** ねんきん定期便「これまでの加入実績に応じた老齢厚生年金の額」 */
-    recordedEmployee: Yen
+    /** 20歳から退職までのうち、厚生年金に入っていない（入っていなかった）月数。学生・自営業・扶養の期間など */
+    unpaidMonths: number
+    /** ねんきん定期便「これまでの加入実績に応じた老齢厚生年金の額」。null なら加入月数と額面から推計する */
+    recordedEmployee: Yen | null
     startAge: number
   }
   severance: { age: number; amount: Yen } | null
@@ -153,6 +157,8 @@ export interface YearRow {
     loanDeduction: Yen
     total: Yen
   }
+  /** 大人ごとの収入（名目） */
+  incomeByPerson: Record<string, { salary: Yen; side: Yen; pension: Yen; severance: Yen }>
   expense: {
     living: Yen
     hobby: Yen
@@ -181,4 +187,6 @@ export interface SimulationResult {
   /** 目標の判定に使う年（最年長の大人が goal.atAge になる年） */
   goalYear: number
   goalMet: boolean
+  /** 大人ごとの年金の内訳と、推定した額面（今年） */
+  pensionByPerson: Record<string, PensionDetail & { gross: Yen }>
 }

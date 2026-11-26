@@ -1,8 +1,10 @@
 import {
-  ACCOUNT_TYPES, CHILD_ALLOWANCE, LIVING_AWAY_ANNUAL, PENSION, SOCIAL_INSURANCE, findStage,
+  ACCOUNT_TYPES, CHILD_ALLOWANCE, LIVING_AWAY_ANNUAL, SOCIAL_INSURANCE, findStage,
 } from './masters'
 import { loanDeduction, loanSchedule, type LoanYear } from './loan'
+import { pensionDetail } from './pension'
 import { estimateGrossFromNet } from './tax'
+import { buildWageIndex, reducedRatio } from './wage'
 import type {
   Account, AccountTypeId, Household, Person, Scenario, SimulationResult, YearRow,
 } from './types'
@@ -29,44 +31,6 @@ export function simulationRange(h: Household): { endYear: number; goalYear: numb
   const endYear = oldestBirth + Math.max(100, h.goal.atAge)
   const goalYear = Math.max(h.startYear, Math.min(endYear, oldestBirth + h.goal.atAge))
   return { endYear, goalYear }
-}
-
-/** 公的年金の年額（今の価値・調整前）。退職年齢で厚生年金の加入年数が変わる */
-export function pensionAnnualReal(
-  p: Person, retireAge: number, startYear: number, wageIndex: (y: number) => number, inflation: (y: number) => number,
-  grossAnnual: number,
-): number {
-  const inc = p.income!
-  let employee = inc.pension.recordedEmployee
-  for (let y = startYear; y - p.birthYear < Math.min(retireAge, 70); y++) {
-    const grossReal = (grossAnnual * wageIndex(y) * reducedRatio(p, y)) / inflation(y)
-    employee += Math.min(grossReal, PENSION.grossCap) * PENSION.employeeRate
-  }
-  const monthsShift = (inc.pension.startAge - 65) * 12
-  const adjust = monthsShift >= 0 ? 1 + monthsShift * PENSION.deferralPerMonth : 1 + monthsShift * PENSION.advancePerMonth
-  return (PENSION.basicFullAnnual + employee) * adjust
-}
-
-function reducedRatio(p: Person, year: number): number {
-  const period = p.income?.reducedPeriods.find((r) => year >= r.fromYear && year <= r.toYear)
-  return period ? period.ratio : 1
-}
-
-/** 収入カーブに沿った、開始年を 1 とした賃金指数 */
-function buildWageIndex(p: Person, scenario: Scenario, startYear: number, endYear: number): (y: number) => number {
-  const idx = new Map<number, number>()
-  let v = 1
-  idx.set(startYear, v)
-  const segs = [...(p.income?.incomeCurve ?? [])].sort((a, b) => a.fromAge - b.fromAge)
-  for (let y = startYear + 1; y <= endYear; y++) {
-    const age = y - p.birthYear
-    const seg = [...segs].reverse().find((s) => s.fromAge <= age)
-    const growth = seg ? (seg.growth ?? scenario.wageGrowth) : scenario.wageGrowth
-    v *= 1 + growth
-    if (seg?.stepMultiplier !== undefined && seg.fromAge === age) v *= seg.stepMultiplier
-    idx.set(y, v)
-  }
-  return (y) => idx.get(y) ?? v
 }
 
 export function simulate(h: Household, scenario: Scenario, opt: SimOptions = {}): SimulationResult {
@@ -97,8 +61,9 @@ export function simulate(h: Household, scenario: Scenario, opt: SimOptions = {})
     const baseNet = Math.max(0, inc.netAnnual - currentDeduction)
     // 額面は手取り（住宅ローン控除の還付を除く）から推定する
     const gross = estimateGrossFromNet(baseNet, ageOf(p, y0))
-    const pensionReal = pensionAnnualReal(p, retireAge(p), y0, wageIndex, f, gross) * (1 + scenario.pensionAdjust)
-    return [p.id, { wageIndex, baseNet, gross, pensionReal }] as const
+    const pension = pensionDetail(p, retireAge(p), y0, scenario, gross, wageIndex)
+    const pensionReal = pension.annual * (1 + scenario.pensionAdjust)
+    return [p.id, { wageIndex, baseNet, gross, pension, pensionReal }] as const
   }))
 
   const salaryOf = (p: Person, y: number) =>
@@ -151,12 +116,19 @@ export function simulate(h: Household, scenario: Scenario, opt: SimOptions = {})
 
     // ---- 収入 ----
     let salary = 0, side = 0, pension = 0, severance = 0, loanDed = 0
+    const incomeByPerson: YearRow['incomeByPerson'] = {}
     for (const p of adults) {
-      salary += salaryOf(p, y)
-      side += sideOf(p, y)
-      if (ageOf(p, y) >= p.income!.pension.startAge) pension += adultCalc.get(p.id)!.pensionReal * fy
-      const sev = p.income!.severance
-      if (sev && ageOf(p, y) === sev.age) severance += sev.amount
+      const own = {
+        salary: salaryOf(p, y),
+        side: sideOf(p, y),
+        pension: ageOf(p, y) >= p.income!.pension.startAge ? adultCalc.get(p.id)!.pensionReal * fy : 0,
+        severance: p.income!.severance && ageOf(p, y) === p.income!.severance.age ? p.income!.severance.amount : 0,
+      }
+      incomeByPerson[p.id] = own
+      salary += own.salary
+      side += own.side
+      pension += own.pension
+      severance += own.severance
       loanDed += deductionOf(p.id, y)
     }
     let childAllowance = 0
@@ -284,6 +256,7 @@ export function simulate(h: Household, scenario: Scenario, opt: SimOptions = {})
     rows.push({
       year: y, ages, inflationFactor: fy,
       income: { salary, side, pension, severance, childAllowance, loanDeduction: loanDed, total: incomeTotal },
+      incomeByPerson,
       expense: { living, hobby, education, costItems, socialInsurance, loan: loanPayment, total: expenseTotal },
       contributions: contributionsOut, net,
       balances: balanceRecord, byType, loanBalance, liquid, total, shortfall,
@@ -292,7 +265,9 @@ export function simulate(h: Household, scenario: Scenario, opt: SimOptions = {})
 
   const goalRow = rows.find((r) => r.year === goalYear)
   const goalMet = firstShortfallYear === null && (goalRow ? goalRow.total >= h.goal.minBalance : false)
-  return { rows, firstShortfallYear, goalYear, goalMet }
+  const pensionByPerson: SimulationResult['pensionByPerson'] = {}
+  for (const [id, c] of adultCalc) pensionByPerson[id] = { ...c.pension, gross: c.gross }
+  return { rows, firstShortfallYear, goalYear, goalMet, pensionByPerson }
 }
 
 /** 開始時点の資産合計 */

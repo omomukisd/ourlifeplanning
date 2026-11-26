@@ -92,6 +92,9 @@ export default function App() {
             replace={replace}
             resetToSample={resetToSample}
             shared={sync.mode === 'shared'}
+            result={results[scenario.id]}
+            scenarioName={scenario.name}
+            pensionAdjust={scenario.pensionAdjust}
           />
         )}
       </main>

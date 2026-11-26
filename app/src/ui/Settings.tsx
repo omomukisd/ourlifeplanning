@@ -9,7 +9,8 @@ import {
 import { annuityPayment, borrowMonthOf, firstPaymentIndex, lastPayment, loanStateAt } from '../engine/loan'
 import { DEFAULT_INCOME_CURVE } from '../engine/sample'
 import { estimateGrossFromNet } from '../engine/tax'
-import type { AccountTypeId, Household, Loan, Person, ReturnKey } from '../engine/types'
+import type { AccountTypeId, Household, Loan, Person, ReturnKey, SimulationResult, YearRow } from '../engine/types'
+import { StackedAreaChart } from './StackedAreaChart'
 import { exportJson, importJson } from '../storage'
 import { CheckField, ManField, NumField, PctField, SelectField, TextField } from './fields'
 import { newId } from './format'
@@ -21,9 +22,14 @@ interface Props {
   resetToSample: () => void
   /** サーバーと共有しているか */
   shared: boolean
+  /** 選んでいるシナリオの計算結果（収入のグラフと年金の表示に使う） */
+  result: SimulationResult
+  scenarioName: string
+  /** シナリオの年金の目減り */
+  pensionAdjust: number
 }
 
-export function Settings({ household: h, update, replace, resetToSample, shared }: Props) {
+export function Settings({ household: h, update, replace, resetToSample, shared, result, scenarioName, pensionAdjust }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [history, setHistory] = useState<HistoryEntry[] | null>(null)
   const adults = h.persons.filter((p) => p.role === 'adult')
@@ -54,14 +60,14 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
       <details className="section">
         <summary>大人（収入・年金）</summary>
         <div className="body">
-          {adults.map((p) => <AdultEditor key={p.id} p={p} startYear={h.startYear} update={(fn) => update((d) => fn(d.persons[personIndex(p.id)]))} remove={() => update((d) => { d.persons = d.persons.filter((x) => x.id !== p.id) })} />)}
+          {adults.map((p) => <AdultEditor key={p.id} p={p} startYear={h.startYear} result={result} scenarioName={scenarioName} pensionAdjust={pensionAdjust} update={(fn) => update((d) => fn(d.persons[personIndex(p.id)]))} remove={() => update((d) => { d.persons = d.persons.filter((x) => x.id !== p.id) })} />)}
           <div className="row-actions">
             <button className="btn small" onClick={() => update((d) => {
               d.persons.push({
                 id: newId('p'), nickname: `大人${adults.length + 1}`, role: 'adult', birthYear: d.startYear - 30,
                 income: {
                   netAnnual: 4_000_000, incomeCurve: DEFAULT_INCOME_CURVE.map((s) => ({ ...s })),
-                  retireAge: 65, sideIncome: null, reducedPeriods: [], pension: { recordedEmployee: 0, startAge: 65 }, severance: null,
+                  retireAge: 65, sideIncome: null, reducedPeriods: [], pension: { unpaidMonths: 24, recordedEmployee: null, startAge: 65 }, severance: null,
                 },
               })
             })}>＋ 大人を追加</button>
@@ -267,7 +273,7 @@ export function Settings({ household: h, update, replace, resetToSample, shared 
   )
 }
 
-function AdultEditor({ p, startYear, update, remove }: { p: Person; startYear: number; update: (fn: (p: Person) => void) => void; remove: () => void }) {
+function AdultEditor({ p, startYear, result, scenarioName, pensionAdjust, update, remove }: { p: Person; startYear: number; result: SimulationResult; scenarioName: string; pensionAdjust: number; update: (fn: (p: Person) => void) => void; remove: () => void }) {
   const inc = p.income!
   return (
     <div className="sub-card">
@@ -279,10 +285,16 @@ function AdultEditor({ p, startYear, update, remove }: { p: Person; startYear: n
         <TextField label="ニックネーム" value={p.nickname} onChange={(v) => update((x) => { x.nickname = v })} />
         <NumField label="生まれた年" unit="年" value={p.birthYear} onChange={(v) => update((x) => { x.birthYear = v ?? x.birthYear })} />
         <ManField label="手取り年収" value={inc.netAnnual} onChange={(v) => update((x) => { x.income!.netAnnual = v ?? 0 })}
-          hint={`ボーナス込み。額面は約${Math.round(estimateGrossFromNet(inc.netAnnual, startYear - p.birthYear) / 10_000)}万円と推定（年金の計算に使う）`} />
+          hint={`ボーナス込み。額面は約${Math.round((result.pensionByPerson[p.id]?.gross ?? estimateGrossFromNet(inc.netAnnual, startYear - p.birthYear)) / 10_000)}万円と推定（住宅ローン控除の還付分は除く）`} />
         <NumField label="退職年齢" unit="歳" value={inc.retireAge} onChange={(v) => update((x) => { x.income!.retireAge = v ?? 65 })} />
         <NumField label="年金の受給開始" unit="歳" value={inc.pension.startAge} onChange={(v) => update((x) => { x.income!.pension.startAge = Math.min(75, Math.max(60, v ?? 65)) })} hint="60〜75歳" />
-        <ManField label="厚生年金の加入実績額" value={inc.pension.recordedEmployee} onChange={(v) => update((x) => { x.income!.pension.recordedEmployee = v ?? 0 })} hint="ねんきん定期便「これまでの加入実績に応じた年金額」の老齢厚生年金（年額）" wide />
+        <NumField label="厚生年金に入っていない月数" unit="か月" value={inc.pension.unpaidMonths} wide
+          onChange={(v) => update((x) => { x.income!.pension.unpaidMonths = Math.max(0, Math.round(v ?? 0)) })}
+          hint="20歳から退職までのうち、学生・自営業・扶養などで会社の厚生年金に入っていない期間。例：22歳で就職なら24" />
+        <PensionSummary detail={result.pensionByPerson[p.id]} startAge={inc.pension.startAge} scenarioName={scenarioName} pensionAdjust={pensionAdjust} />
+        <ManField label="ねんきん定期便の老齢厚生年金（わかれば）" value={inc.pension.recordedEmployee} allowEmpty wide
+          onChange={(v) => update((x) => { x.income!.pension.recordedEmployee = v })}
+          hint="「これまでの加入実績に応じた年金額」の老齢厚生年金（年額）。入れると、これまでの分はこの金額を使う。空欄なら推計" />
         <CheckField label="サイドFIREの収入を設定する" checked={!!inc.sideIncome} onChange={(v) => update((x) => { x.income!.sideIncome = v ? { netAnnual: 1_200_000, untilAge: 60 } : null })} />
         {inc.sideIncome && (
           <>
@@ -313,6 +325,7 @@ function AdultEditor({ p, startYear, update, remove }: { p: Person; startYear: n
       <div className="row-actions">
         <button className="btn small" onClick={() => update((x) => { x.income!.incomeCurve.push({ fromAge: 55, growth: 0 }) })}>＋ 区間を追加</button>
       </div>
+      <IncomeChart p={p} rows={result.rows} scenarioName={scenarioName} />
     </div>
   )
 }
@@ -391,4 +404,56 @@ function LoanSummary({ loan, startYear }: { loan: Loan; startYear: number }) {
       : `${startYear}年はじめの残高 約${man(balance)}・${perMonth}・${ym(last.year, last.month)}に完済`
   }
   return <p className="note" style={{ gridColumn: '1 / -1', margin: 0 }}>{text}</p>
+}
+
+const months = (m: number) => {
+  const y = Math.floor(m / 12)
+  const r = m % 12
+  return y === 0 ? `${r}か月` : r === 0 ? `${y}年` : `${y}年${r}か月`
+}
+
+/** 厚生年金の加入月数と、受け取る年金の見込み */
+function PensionSummary({ detail, startAge, scenarioName, pensionAdjust }: { detail?: SimulationResult['pensionByPerson'][string]; startAge: number; scenarioName: string; pensionAdjust: number }) {
+  if (!detail) return null
+  const total = detail.pastMonths + detail.futureMonths
+  const m = (v: number) => `${Math.round(v / 10_000).toLocaleString()}万円`
+  const shift = Math.round((detail.startAdjust - 1) * 1000) / 10
+  return (
+    <div className="pension-box" style={{ gridColumn: '1 / -1' }}>
+      <div className="pension-row"><span>厚生年金に入る期間</span><strong>{months(total)}</strong></div>
+      <div className="pension-sub">これまで {months(detail.pastMonths)}＋これから {months(detail.futureMonths)}</div>
+      <div className="pension-row"><span>受け取る年金（{startAge}歳から・年額）</span><strong>{m(detail.annual)}</strong></div>
+      <div className="pension-sub">
+        老齢基礎 {m(detail.basic)}＋老齢厚生 {m(detail.employee)}
+        {shift !== 0 && `、${startAge > 65 ? '繰下げ' : '繰上げ'}で${shift > 0 ? '+' : ''}${shift}%`}
+        ・月 約{(detail.annual / 12 / 10_000).toFixed(1)}万円
+      </div>
+      {pensionAdjust !== 0 && (
+        <div className="pension-sub">シナリオ「{scenarioName}」の目減り（{Math.round(pensionAdjust * 100)}%）を入れると {m(detail.annual * (1 + pensionAdjust))}（収入のグラフはこちら）</div>
+      )}
+      <div className="pension-sub">今の価値・「{scenarioName}」の昇給率と、推定した額面で計算</div>
+    </div>
+  )
+}
+
+const INCOME_SERIES = [
+  { key: 'salary', label: '給与（手取り）', color: 'var(--series-1)' },
+  { key: 'side', label: 'サイド収入', color: 'var(--series-2)' },
+  { key: 'pension', label: '年金', color: 'var(--series-3)' },
+] as const
+
+/** 1人分の収入の推移（今の価値）。退職金は1年だけ突出するのでグラフに含めず、下に書く */
+function IncomeChart({ p, rows, scenarioName }: { p: Person; rows: YearRow[]; scenarioName: string }) {
+  const own = rows.map((r) => ({ r, v: r.incomeByPerson[p.id] })).filter((x) => x.v)
+  const series = INCOME_SERIES.filter((s) => own.some(({ v }) => v[s.key] > 0))
+  const points = own.map(({ r, v }) => ({ year: r.year, values: series.map((s) => v[s.key] / r.inflationFactor) }))
+  const sev = p.income?.severance
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="flabel" style={{ fontSize: 12, color: 'var(--ink-2)', margin: '0 0 6px' }}>{p.nickname}の収入の推移（今の価値・{scenarioName}）</div>
+      <StackedAreaChart series={series.length ? series : [INCOME_SERIES[0]]} points={points} agePerson={p} height={180} step
+        ariaLabel={`${p.nickname}の収入の推移`} />
+      {sev && sev.amount > 0 && <p className="note" style={{ margin: '4px 0 0' }}>退職金 {Math.round(sev.amount / 10_000).toLocaleString()}万円（{sev.age}歳）はグラフに含めていません。</p>}
+    </div>
+  )
 }
