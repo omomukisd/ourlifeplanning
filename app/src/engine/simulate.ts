@@ -2,6 +2,7 @@ import {
   ACCOUNT_TYPES, CHILD_ALLOWANCE, LIVING_AWAY_ANNUAL, PENSION, SOCIAL_INSURANCE, findStage,
 } from './masters'
 import { loanDeduction, loanSchedule, type LoanYear } from './loan'
+import { estimateGrossFromNet } from './tax'
 import type {
   Account, AccountTypeId, Household, Person, Scenario, SimulationResult, YearRow,
 } from './types'
@@ -33,11 +34,12 @@ export function simulationRange(h: Household): { endYear: number; goalYear: numb
 /** 公的年金の年額（今の価値・調整前）。退職年齢で厚生年金の加入年数が変わる */
 export function pensionAnnualReal(
   p: Person, retireAge: number, startYear: number, wageIndex: (y: number) => number, inflation: (y: number) => number,
+  grossAnnual: number,
 ): number {
   const inc = p.income!
   let employee = inc.pension.recordedEmployee
   for (let y = startYear; y - p.birthYear < Math.min(retireAge, 70); y++) {
-    const grossReal = (inc.grossAnnual * wageIndex(y) * reducedRatio(p, y)) / inflation(y)
+    const grossReal = (grossAnnual * wageIndex(y) * reducedRatio(p, y)) / inflation(y)
     employee += Math.min(grossReal, PENSION.grossCap) * PENSION.employeeRate
   }
   const monthsShift = (inc.pension.startAge - 65) * 12
@@ -93,8 +95,10 @@ export function simulate(h: Household, scenario: Scenario, opt: SimOptions = {})
     const currentDeduction = ownLoans.reduce(
       (s, l) => s + (l.deduction!.currentAmount ?? loanDeduction(l, y0, schedules.get(l.id)!.get(y0)!.endBalance)), 0)
     const baseNet = Math.max(0, inc.netAnnual - currentDeduction)
-    const pensionReal = pensionAnnualReal(p, retireAge(p), y0, wageIndex, f) * (1 + scenario.pensionAdjust)
-    return [p.id, { wageIndex, baseNet, pensionReal }] as const
+    // 額面は手取り（住宅ローン控除の還付を除く）から推定する
+    const gross = estimateGrossFromNet(baseNet, ageOf(p, y0))
+    const pensionReal = pensionAnnualReal(p, retireAge(p), y0, wageIndex, f, gross) * (1 + scenario.pensionAdjust)
+    return [p.id, { wageIndex, baseNet, gross, pensionReal }] as const
   }))
 
   const salaryOf = (p: Person, y: number) =>
@@ -105,8 +109,8 @@ export function simulate(h: Household, scenario: Scenario, opt: SimOptions = {})
     return side.netAnnual * f(y)
   }
   const grossOf = (p: Person, y: number) => {
-    if (y < y0) return p.income!.grossAnnual
-    if (!isRetired(p, y)) return p.income!.grossAnnual * adultCalc.get(p.id)!.wageIndex(y) * reducedRatio(p, y)
+    if (y < y0) return adultCalc.get(p.id)!.gross
+    if (!isRetired(p, y)) return adultCalc.get(p.id)!.gross * adultCalc.get(p.id)!.wageIndex(y) * reducedRatio(p, y)
     return sideOf(p, y) / 0.8
   }
 

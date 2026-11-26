@@ -55,7 +55,7 @@ erDiagram
 | 項目 | 型 | 説明 |
 |------|----|------|
 | netAnnual | 円 | 今年の手取り年収（ボーナス込み）。住宅ローン控除による還付の扱いは §3.2 |
-| grossAnnual | 円 | 今年の額面年収。**年金の推計にだけ使う** |
+| （額面年収） | 円 | **入力しない**。手取り（住宅ローン控除の還付を除く）から、会社員の税・社会保険の概算で逆算する（`engine/tax.ts`）。年金の推計と退職後の国保の計算に使う。扶養控除などは考えないので、少し高めに出る |
 | incomeCurve | `[{ untilAge, growth }]` | **収入カーブ**。年齢の区間ごとの昇給率。初期値は下の表 |
 | retireAge | 歳 | 退職年齢。大人ごとに別々に設定できる |
 | sideIncome | `{ netAnnual, untilAge }` | サイドFIRE期間の手取り収入（退職後〜untilAge） |
@@ -78,8 +78,8 @@ erDiagram
 |------|----|------|
 | stageId | マスタ参照 | 例：`kindergarten`、`university`、`master` |
 | type | `public` / `private` / マスタで定義した区分 | 例：大学なら `national` / `privateArts` / `privateScience` / `privateMedical` |
-| startAge | 歳 | 初期値はマスタの標準年齢。浪人・留年などで変えられる |
-| years | 年 | 初期値はマスタの標準年数（6年制学部なら6） |
+| startAge | 歳 | マスタの標準年齢から自動で決まる（高校のあとは18歳、大学院は卒業の年齢から） |
+| years | 年 | マスタの標準年数から自動で決まる（6年制学部なら6）。画面では入力しない |
 | livingAway | bool | 一人暮らし（仕送り）をするか |
 
 **EducationStage（教育段階のマスタ）**：保育（0〜2歳）、幼稚園・保育園（3〜5歳）、小学校、中学校、高校、専門学校、短大、大学（4年制 / 6年制）、大学院（修士2年 / 博士3年）、留学（年数は自由）など。段階ごとに「区分ごとの入学時費用・毎年の費用」を持つ。
@@ -113,8 +113,10 @@ erDiagram
 |------|----|------|
 | kind | `mortgage` / `car` / `other` | |
 | ownerId | 人のid | 名義人 |
-| balance | 円 | 現在の残高 |
-| remainingMonths | 月 | 残りの返済回数 |
+| principal | 円 | 借りた額 |
+| borrowYear | 年 | 借りた年。未来の年でもよい（借りるまでは残高・返済とも 0） |
+| borrowMonth | 月 | 借りた月（1〜12）。翌月から返済が始まる |
+| termYears | 年 | 返済期間。今年はじめの残高と残りの回数は、借りた額・期間・今の金利から元利均等で計算する |
 | method | `annuity` | 元利均等（MVPはこれだけ） |
 | rateChanges | `[{ fromYearMonth, rate }]` | 決まっている金利の変更 |
 | followsMarketRate | bool | 変動金利なら true。シナリオの「金利の上昇幅」が足される（§2.2） |

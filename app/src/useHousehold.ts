@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getHousehold, getMe, putHousehold, type HouseholdRecord, type Unavailable } from './api'
+import { migrateHousehold } from './engine/migrate'
 import { sampleHousehold } from './engine/sample'
 import type { Household } from './engine/types'
 import { clearHousehold, loadHousehold, saveHousehold } from './storage'
@@ -59,7 +60,7 @@ export function useHousehold() {
   }, [])
 
   const replace = useCallback((h: Household) => {
-    setHousehold(h)
+    setHousehold(migrateHousehold(h))
     setIsSample(false)
     markEdited()
   }, [])
@@ -75,7 +76,7 @@ export function useHousehold() {
   const applyRemote = useCallback((rec: HouseholdRecord, pulledFromOther = false) => {
     versionRef.current = rec.version
     dirtyRef.current = false
-    setHousehold(rec.data)
+    setHousehold(migrateHousehold(rec.data))
     setIsSample(false)
     setSync((s) => ({
       mode: 'shared', email: s.mode === 'shared' ? s.email : null, status: 'saved',

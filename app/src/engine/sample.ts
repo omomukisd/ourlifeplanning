@@ -17,7 +17,7 @@ export function sampleHousehold(startYear = new Date().getFullYear()): Household
       {
         id: 'a1', nickname: 'あおい', role: 'adult', birthYear: startYear - 36,
         income: {
-          netAnnual: 4_800_000, grossAnnual: 6_300_000,
+          netAnnual: 4_800_000,
           incomeCurve: DEFAULT_INCOME_CURVE.map((s) => ({ ...s })),
           retireAge: 65, sideIncome: { netAnnual: 1_200_000, untilAge: 60 }, reducedPeriods: [],
           pension: { recordedEmployee: 250_000, startAge: 65 }, severance: { age: 65, amount: 10_000_000 },
@@ -26,7 +26,7 @@ export function sampleHousehold(startYear = new Date().getFullYear()): Household
       {
         id: 'a2', nickname: 'ひかる', role: 'adult', birthYear: startYear - 34,
         income: {
-          netAnnual: 3_600_000, grossAnnual: 4_600_000,
+          netAnnual: 3_600_000,
           incomeCurve: DEFAULT_INCOME_CURVE.map((s) => ({ ...s })),
           retireAge: 65, sideIncome: { netAnnual: 1_000_000, untilAge: 60 }, reducedPeriods: [],
           pension: { recordedEmployee: 180_000, startAge: 65 }, severance: null,
@@ -52,9 +52,9 @@ export function sampleHousehold(startYear = new Date().getFullYear()): Household
     loans: [
       {
         id: 'loan1', name: '住宅ローン（あおい）', kind: 'mortgage', ownerId: 'a1',
-        balance: 25_000_000, remainingMonths: 32 * 12, rate: 0.009,
+        principal: 30_000_000, borrowYear: startYear - 3, borrowMonth: 3, termYears: 35, rate: 0.009,
         rateChanges: [], followsMarketRate: true,
-        deduction: { untilYear: startYear + 10, maxBalance: 30_000_000, currentAmount: null },
+        deduction: { untilYear: startYear - 3 + 12, maxBalance: 30_000_000, currentAmount: null },
       },
     ],
     costItems: [

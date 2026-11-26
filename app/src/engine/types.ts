@@ -44,8 +44,6 @@ export interface IncomeCurveSegment {
 export interface IncomeProfile {
   /** 今年の手取り年収（ボーナス込み・住宅ローン控除の還付を含む） */
   netAnnual: Yen
-  /** 今年の額面年収（年金の推計にだけ使う） */
-  grossAnnual: Yen
   incomeCurve: IncomeCurveSegment[]
   /** この年齢になった年から就労収入が 0 になる */
   retireAge: number
@@ -93,9 +91,15 @@ export interface Loan {
   name: string
   kind: 'mortgage' | 'car' | 'other'
   ownerId: string | null
-  balance: Yen
-  remainingMonths: number
-  /** 今の年利 */
+  /** 借りた額 */
+  principal: Yen
+  /** 借りた年（未来の年でもよい） */
+  borrowYear: number
+  /** 借りた月（1〜12）。翌月から返済が始まる。古いデータにはないので、なければ1月とみなす */
+  borrowMonth?: number
+  /** 返済期間（年） */
+  termYears: number
+  /** 今の年利（借りた年から今年までの返済も、この金利で計算する） */
   rate: number
   /** 決まっている金利の変更 */
   rateChanges: { year: number; month: number; rate: number }[]
