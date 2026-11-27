@@ -229,7 +229,7 @@ details.section > .body { padding: 0 16px 16px; }
 .field.wide { grid-column: 1 / -1; }
 .field label, .field .flabel { font-size: 12px; color: var(--ink-2); }
 .field .control { display: flex; align-items: center; gap: 6px; }
-.field input[type='number'], .field input[type='text'], .field select {
+.field input[type='number'], .field input[type='text'], .field input[type='month'], .field select {
   width: 100%; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--page); font-size: 16px; min-height: 40px;
 }
@@ -259,3 +259,19 @@ details.section > .body { padding: 0 16px 16px; }
 .pension-row:first-child { margin-top: 0; }
 .pension-row strong { font-size: 16px; font-variant-numeric: tabular-nums; }
 .pension-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+/* 実績 */
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat-grid .label { font-size: 12px; color: var(--muted); }
+.stat-grid .value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stat-grid .sub { font-size: 12px; color: var(--muted); }
+.compare { margin-top: 12px; border: 1px solid var(--grid); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.compare-row { display: flex; justify-content: space-between; align-items: baseline; }
+.compare-row strong { font-variant-numeric: tabular-nums; }
+.compare-msg { margin-top: 4px; font-weight: 600; }
+.compare.over .compare-msg { color: var(--critical-ink); }
+.compare-sub { margin-top: 4px; font-size: 12px; color: var(--muted); }
+.legend .swatch.line { width: 14px; height: 0; border-radius: 0; border-top: 2px solid; background: none; }
+.legend .swatch.line.dashed { border-top-style: dashed; }
+table.actuals td .memo { font-size: 11px; color: var(--muted); white-space: normal; max-width: 9em; }
+.btn:disabled { opacity: 0.5; cursor: default; }

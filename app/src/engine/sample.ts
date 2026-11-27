@@ -67,6 +67,7 @@ export function sampleHousehold(startYear = new Date().getFullYear()): Household
     retiredLivingRatio: 0.8,
     hobbyMonthly: 30_000,
     goal: { minBalance: 0, atAge: 100 },
+    actuals: [],
     withdrawalOrder: ['cash', 'zaikei', 'taxable', 'other', 'insurance', 'nisa', 'dc', 'ideco'],
     scenarios: DEFAULT_SCENARIOS.map((s) => structuredClone(s)),
   }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { simulate } from './engine/simulate'
 import type { SimulationResult } from './engine/types'
 import { useHousehold } from './useHousehold'
+import { ActualsPage } from './ui/ActualsPage'
 import { Dashboard } from './ui/Dashboard'
 import { SyncBar } from './ui/SyncBar'
 import { FirePage } from './ui/FirePage'
@@ -9,12 +10,13 @@ import { Settings } from './ui/Settings'
 import { YearTable } from './ui/YearTable'
 import type { ScenarioAnswers, WorkerRequest, WorkerResponse } from './worker'
 
-type Tab = 'home' | 'table' | 'fire' | 'settings'
+type Tab = 'home' | 'table' | 'fire' | 'actuals' | 'settings'
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'home', label: 'ホーム', icon: '◎' },
   { id: 'table', label: '推移', icon: '▤' },
   { id: 'fire', label: 'FIRE', icon: '◇' },
+  { id: 'actuals', label: '実績', icon: '✓' },
   { id: 'settings', label: '入力', icon: '✎' },
 ]
 
@@ -63,7 +65,7 @@ export default function App() {
               <button key={s.id} aria-pressed={s.id === scenario.id} onClick={() => setScenarioId(s.id)}>{s.name}</button>
             ))}
           </div>
-          {tab !== 'settings' && tab !== 'fire' && (
+          {tab !== 'settings' && tab !== 'fire' && tab !== 'actuals' && (
             <div className="segmented" role="group" aria-label="金額の表示">
               <button aria-pressed={real} onClick={() => setReal(true)}>今の価値</button>
               <button aria-pressed={!real} onClick={() => setReal(false)}>名目</button>
@@ -85,6 +87,7 @@ export default function App() {
         {tab === 'home' && <Dashboard household={household} results={results} answers={answers} scenario={scenario} real={real} />}
         {tab === 'table' && <YearTable household={household} result={results[scenario.id]} real={real} />}
         {tab === 'fire' && <FirePage household={household} scenario={scenario} answers={answers?.[scenario.id]} />}
+        {tab === 'actuals' && <ActualsPage household={household} update={update} result={results[scenario.id]} scenarioName={scenario.name} />}
         {tab === 'settings' && (
           <Settings
             household={household}
