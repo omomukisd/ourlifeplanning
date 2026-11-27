@@ -22,5 +22,5 @@ export function migrateHousehold(h: Household): Household {
     }
     return { ...p, income: { ...income, pension } }
   })
-  return { ...h, loans, persons }
+  return { ...h, loans, persons, actuals: Array.isArray(h.actuals) ? h.actuals : [] }
 }

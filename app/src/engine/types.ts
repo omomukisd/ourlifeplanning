@@ -23,6 +23,19 @@ export interface Household {
   /** 取り崩す口座の種類の順番 */
   withdrawalOrder: AccountTypeId[]
   scenarios: Scenario[]
+  /** 毎月の実績（古い月から順） */
+  actuals: MonthlyActual[]
+}
+
+/** 1か月分の実績 */
+export interface MonthlyActual {
+  /** 例：2026-11 */
+  yearMonth: string
+  /** 入ってきたお金（給与振込・ボーナス・児童手当など、手取りの合計） */
+  income: Yen
+  /** 使ったお金（生活費・住居費・ローン返済・教育費など。積立や投資に回した分は含めない） */
+  expense: Yen
+  memo?: string
 }
 
 export interface Person {

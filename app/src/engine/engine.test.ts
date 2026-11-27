@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { expenseMovingAverage, planMonthly, summarize, upsertActual } from './actuals'
 import { defaultChildPlan, planFromSteps, stepsFromPlan } from './education'
 import { annuityPayment, lastPayment, loanSchedule, loanStateAt } from './loan'
 import { migrateHousehold } from './migrate'
@@ -39,6 +40,7 @@ function docExample(): Household {
     goal: { minBalance: 0, atAge: 100 },
     withdrawalOrder: ['cash', 'taxable', 'nisa', 'dc', 'ideco'],
     scenarios: [flat],
+    actuals: [],
   }
 }
 
@@ -266,5 +268,39 @@ describe('厚生年金（入っていない月数から推計）', () => {
   it('70歳まで繰下げると42%増える', () => {
     const d = pensionDetail(person({ startAge: 70 }), 65, Y0, flat, 6_000_000, idx)
     expect(d.startAdjust).toBeCloseTo(1.42)
+  })
+})
+
+describe('毎月の実績', () => {
+  const a = (yearMonth: string, income: number, expense: number) => ({ yearMonth, income, expense })
+
+  it('同じ月は上書きされ、月の順に並ぶ', () => {
+    let list = upsertActual([], a('2030-03', 40, 30))
+    list = upsertActual(list, a('2030-01', 40, 30))
+    list = upsertActual(list, a('2030-03', 50, 20))
+    expect(list.map((x) => [x.yearMonth, x.income])).toEqual([['2030-01', 40], ['2030-03', 50]])
+  })
+
+  it('直近12か月の平均と、同じ年の計画の月額を比べる', () => {
+    const h = docExample()
+    const result = simulate(h, flat)
+    const list = Array.from({ length: 14 }, (_, i) => a(`${Y0 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`, 400_000, i < 2 ? 999_999 : 300_000))
+    const s = summarize(list, result)!
+    expect(s.months).toBe(12)
+    expect(s.expenseAvg).toBeCloseTo(300_000)
+    expect(s.savingRate).toBeCloseTo(0.25)
+    // 計画：その年の支出の年額 ÷ 12
+    expect(planMonthly(result, `${Y0}-05`)!.expense).toBeCloseTo(result.rows[0].expense.total / 12)
+  })
+
+  it('支出の移動平均は、その月までの最大12件の平均', () => {
+    const list = [a('2030-01', 0, 100), a('2030-02', 0, 200), a('2030-03', 0, 600)]
+    expect(expenseMovingAverage(list).map((x) => x.value)).toEqual([100, 150, 300])
+  })
+
+  it('古いデータに実績がなくても読み込める', () => {
+    const h = docExample() as Partial<Household>
+    delete h.actuals
+    expect(migrateHousehold(h as Household).actuals).toEqual([])
   })
 })
