@@ -44,8 +44,8 @@ export function FirePage({ household, scenario, answers }: Props) {
         </p>
         <Heatmap fire={fire} now={now} selected={selected} onSelect={setSelected} />
         <ul className="legend" style={{ marginTop: 8 }}>
-          <li><span className="swatch" style={{ background: 'var(--good-wash)', border: '1px solid var(--good)' }} />✓ 可能</li>
-          <li><span className="swatch" style={{ background: 'var(--surface-2)', border: '1px solid var(--axis)' }} />不可</li>
+          <li><span className="swatch" style={{ background: 'color-mix(in srgb, var(--good) 62%, var(--surface))' }} />✓ 可能</li>
+          <li><span className="swatch" style={{ background: 'var(--surface-2)' }} />不可</li>
         </ul>
         {cell ? (
           <div className="banner" style={{ marginTop: 8 }}>

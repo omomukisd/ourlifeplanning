@@ -144,22 +144,24 @@ export function ActualsPage({ household: h, update, result, scenarioName }: Prop
 function PlanCompare({ actual, plan, actualIncome, planIncome, scenarioName }: { actual: number; plan: number; actualIncome: number; planIncome: number | null; scenarioName: string }) {
   const diff = actual - plan
   const close = Math.abs(diff) < plan * 0.05
+  const over = !close && diff > 0
   return (
-    <div className={`compare ${close ? '' : diff > 0 ? 'over' : 'under'}`}>
-      <div className="compare-row">
-        <span>計画の支出（月平均）</span><strong>{manDetail(plan)}</strong>
+    <div className={`compare${over ? ' over' : ''}`}>
+      <div className="meter-label"><span>使ったお金（平均）</span><span>計画 {manDetail(plan)}</span></div>
+      <div className="meter" role="img" aria-label={`平均 ${manDetail(actual)}、計画 ${manDetail(plan)}`}>
+        <div className={`fill${over ? ' over' : ''}`} style={{ width: `${Math.min(100, (actual / plan) * 100)}%` }} />
       </div>
       <div className="compare-msg">
         {close
-          ? '✓ 支出はほぼ計画どおりです'
+          ? <strong>支出はほぼ計画どおりです</strong>
           : diff > 0
-            ? `▲ 計画より月 ${manDetail(diff)} 多く使っています（年 約${Math.round((diff * 12) / 10_000)}万円）`
-            : `▼ 計画より月 ${manDetail(-diff)} 少なく済んでいます（年 約${Math.round((-diff * 12) / 10_000)}万円）`}
+            ? <><strong>計画より月{manDetail(diff)}多く使っています</strong>（年 約{Math.round((diff * 12) / 10_000)}万円）</>
+            : <><strong>計画より月{manDetail(-diff)}少なく済んでいます</strong>（年 約{Math.round((-diff * 12) / 10_000)}万円）</>}
       </div>
       {planIncome !== null && (
         <div className="compare-sub">収入は計画 {manDetail(planIncome)} に対して実績 {manDetail(actualIncome)}（{signed(actualIncome - planIncome)}）</div>
       )}
-      <div className="compare-sub">計画はシナリオ「{scenarioName}」の今年の年額 ÷ 12（車の買い替えなどの数年ごとの出費や、退職後の社会保険も含む）</div>
+      <div className="compare-sub">計画はシナリオ「{scenarioName}」のその年の年額 ÷ 12（車の買い替えなど数年ごとの出費や、退職後の社会保険も含む）</div>
     </div>
   )
 }

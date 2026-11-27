@@ -146,7 +146,7 @@ export function StackedAreaChart({ series, points, ariaLabel, agePerson, height 
               </div>
             ))}
             {series.length > 1 && <div className="t-row t-total"><span>合計</span><span>{man(hv.total)}</span></div>}
-            {hv.alert && alertLabel && <div className="t-row" style={{ color: 'var(--critical-ink)' }}><span>⚠ {alertLabel.tooltip}</span></div>}
+            {hv.alert && alertLabel && <div className="t-row" style={{ color: 'var(--critical-ink)' }}><span>{alertLabel.tooltip}</span></div>}
           </div>
         )}
       </div>

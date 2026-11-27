@@ -20,6 +20,7 @@ app/
     simulate.ts   1年ごとのシミュレーション（docs/03 の §3）
     solve.ts      3つの問いの答え（老後・趣味予算・FIRE）
     actuals.ts    毎月の実績の集計と、計画との比較
+    events.ts     ホームの年表（これからの出来事）
     sample.ts     架空のサンプル世帯
     engine.test.ts 検算のテスト
   src/worker.ts  重い探索（趣味予算の二分探索、FIRE の表）を Web Worker で計算
@@ -66,27 +67,32 @@ sequenceDiagram
 - 繰上げ返済（F-33）
 - 育休・時短の期間の入力画面（データと計算は対応済み）
 
-## 5. 計算の簡易化
+## 5. 画面のデザイン
+- トーン：クリーム色の地（`#fbf6ee`）に白い角丸カード、丸ゴシック（M PLUS Rounded 1c）、画面下に浮かんだ黒いタブ。ダークモードは同じ配色の暗い版
+- ホームの順番：①資産の推移（結論とシナリオの比較）②これからの出来事（年表）③今月の実績 ④趣味に使えるお金
+- グラフの色は `src/styles.css` の `--series-1〜4`（色覚の違いでも見分けられることを確認済み）。シナリオの線は実線・点線でも見分けられるようにする
+
+## 6. 計算の簡易化
 - 企業型DCの掛金は会社が出すものとし、家計の支出に含めない
 - 国民健康保険の所得には年金収入を含めない。75歳以降の後期高齢者医療制度は考えない
 - 老齢基礎年金は、退職後も60歳まで国民年金を払う前提で満額とする
 - 余ったお金はすべて現預金に入る（自動で投資に回さない）
 
-## 6. 公開と共有の設定手順
+## 7. 公開と共有の設定手順
 設定ファイルは `app/wrangler.jsonc`。Access の設定値は**公開リポジトリに書かず**、Cloudflare の管理画面でシークレットとして登録する。
 
-### 6.1 デプロイ（Workers Builds）
+### 7.1 デプロイ（Workers Builds）
 - ルートディレクトリ：`app`
 - ビルドコマンド：`npm run build`
 - デプロイコマンド：`npx wrangler deploy`（wrangler は devDependencies で版を固定）
 - D1 データベース（`ourlifeplanning`）は、初回のデプロイで自動作成される。ビルドログに D1 の作成エラーが出た場合は、管理画面の D1 で同じ名前のデータベースを作り、その ID を `wrangler.jsonc` の `d1_databases` に `database_id` として追記する（ID は秘密情報ではない）
 
-### 6.2 Cloudflare Access（ログイン）
+### 7.2 Cloudflare Access（ログイン）
 1. Workers & Pages → ourlifeplanning → 設定 → ドメインとルート → `workers.dev` の行で **Cloudflare Access を有効化**
 2. 表示される **AUD タグ** と **チームドメイン**（`◯◯.cloudflareaccess.com`）を控える
 3. Zero Trust → Access → アプリケーション → 作成されたアプリのポリシーで、許可する人を**夫婦2人のメールアドレス**にする（ログイン方法はメールに届くワンタイムコードで十分）
 
-### 6.3 Worker のシークレット
+### 7.3 Worker のシークレット
 Workers & Pages → ourlifeplanning → 設定 → 変数とシークレット で、種類「シークレット」で登録する。
 
 | 名前 | 値 |
@@ -95,11 +101,11 @@ Workers & Pages → ourlifeplanning → 設定 → 変数とシークレット �
 | `ACCESS_AUD` | AUD タグ |
 | `ALLOWED_EMAILS` | 夫婦のメールアドレスをカンマ区切りで |
 
-### 6.4 使い始め
+### 7.4 使い始め
 - 先に、入力済みのデータがあるスマホで開く（サーバーが空なら、その端末のデータが最初の共有データになる）
 - もう一方のスマホで開くと、同じデータが表示される
 
-### 6.5 ローカルで動かす
+### 7.5 ローカルで動かす
 ```sh
 cd app
 echo 'DEV_USER_EMAIL=dev@example.com' > .dev.vars   # localhost でだけ有効
