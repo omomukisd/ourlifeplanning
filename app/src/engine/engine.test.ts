@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { expenseMovingAverage, planMonthly, summarize, upsertActual } from './actuals'
 import { defaultChildPlan, planFromSteps, stepsFromPlan } from './education'
+import { lifeEvents } from './events'
 import { annuityPayment, lastPayment, loanSchedule, loanStateAt } from './loan'
 import { migrateHousehold } from './migrate'
 import { pensionDetail } from './pension'
@@ -302,5 +303,26 @@ describe('毎月の実績', () => {
     const h = docExample() as Partial<Household>
     delete h.actuals
     expect(migrateHousehold(h as Household).actuals).toEqual([])
+  })
+})
+
+describe('ホームの年表', () => {
+  it('子どもの入学・退職・年金・ローン完済・不足が年の順に並ぶ', () => {
+    const h = sampleHousehold(2026)
+    const sc = h.scenarios[0]
+    const ev = lifeEvents(h, sc, simulate(h, sc))
+    const titles = ev.map((e) => e.title)
+    expect(titles).toContain('そらが小学校に入学')
+    expect(titles.some((t) => t.endsWith('の年金がスタート'))).toBe(true)
+    expect(titles.some((t) => t.endsWith('を完済'))).toBe(true)
+    expect(ev.every((e, i) => i === 0 || ev[i - 1].year <= e.year)).toBe(true)
+    expect(ev.every((e) => e.year > 2026)).toBe(true)
+  })
+
+  it('FIRE の答えがあれば、その年を出す', () => {
+    const h = sampleHousehold(2026)
+    const sc = h.scenarios[0]
+    const ev = lifeEvents(h, sc, simulate(h, sc), { full: fireGrid(h, sc, 'full'), side: fireGrid(h, sc, 'side') })
+    expect(ev.some((e) => e.title === '完全FIREできる')).toBe(true)
   })
 })

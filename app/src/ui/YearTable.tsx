@@ -59,7 +59,7 @@ export function YearTable({ household, result, real }: Props) {
             <tbody>
               {result.rows.map((r) => (
                 <tr key={r.year} className={r.shortfall ? 'short' : undefined}>
-                  <td>{r.year}{r.shortfall ? ' ⚠' : ''}</td>
+                  <td>{r.year}{r.shortfall ? ' ●' : ''}</td>
                   {adults.map((p) => <td key={p.id}>{r.ages[p.id]}</td>)}
                   {cols.map((c) => {
                     const v = c.get(r)
@@ -70,7 +70,7 @@ export function YearTable({ household, result, real }: Props) {
             </tbody>
           </table>
         </div>
-        <p className="note">⚠ は資金が不足している年。「資産」は口座の合計で、ローン残高は引いていません。</p>
+        <p className="note">● は資金が不足している年。「資産」は口座の合計で、ローン残高は引いていません。</p>
       </section>
     </>
   )

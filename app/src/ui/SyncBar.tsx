@@ -53,7 +53,7 @@ export function SyncBar({ sync, onResolve, onRetry }: Props) {
 
   return (
     <p className={`sync-line${sync.status === 'error' ? ' error' : ''}`} role="status">
-      <span aria-hidden>👥</span> 共有中・{label}
+      共有中・{label}
       {sync.status === 'saved' && sync.updatedAt && <>（{who(sync.updatedBy, sync.email)}・{time(sync.updatedAt)}）</>}
       {sync.pulledFromOther && <>　最新の内容を読み込みました</>}
       {sync.status === 'error' && <button className="btn small" style={{ marginLeft: 8 }} onClick={onRetry}>再試行</button>}
