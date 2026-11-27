@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { defaultChildPlan, planFromSteps, stepsFromPlan } from './education'
 import { annuityPayment, lastPayment, loanSchedule, loanStateAt } from './loan'
 import { migrateHousehold } from './migrate'
+import { pensionDetail } from './pension'
 import { estimateGrossFromNet, netFromGross } from './tax'
 import { DEFAULT_SCENARIOS } from './masters'
 import { sampleHousehold } from './sample'
 import { simulate } from './simulate'
 import { fireGrid, maxHobbyMonthly } from './solve'
-import type { Household, Loan, Scenario } from './types'
+import type { Household, Loan, Person, Scenario } from './types'
 
 const Y0 = 2030
 const flat: Scenario = {
@@ -25,7 +26,7 @@ function docExample(): Household {
       income: {
         netAnnual: 5_000_000, incomeCurve: [{ fromAge: 0, growth: null }],
         retireAge: 65, sideIncome: null, reducedPeriods: [],
-        pension: { recordedEmployee: 0, startAge: 65 }, severance: null,
+        pension: { unpaidMonths: 0, recordedEmployee: 0, startAge: 65 }, severance: null,
       },
     }],
     accounts: [
@@ -226,5 +227,44 @@ describe('子どもの進路', () => {
   it('専門学校や就職を選ぶと大学院は付かない', () => {
     const steps = stepsFromPlan({ ...defaultChildPlan(), after: 'vocational:private', grad: 'master:national' })
     expect(steps.some((s) => s.stageId === 'master')).toBe(false)
+  })
+})
+
+describe('厚生年金（入っていない月数から推計）', () => {
+  const person = (over: Partial<NonNullable<Person['income']>['pension']> = {}): Person => ({
+    id: 'a', nickname: 'A', role: 'adult', birthYear: Y0 - 40,
+    income: {
+      netAnnual: 5_000_000, incomeCurve: [{ fromAge: 0, growth: 0 }], retireAge: 65, sideIncome: null, reducedPeriods: [],
+      pension: { unpaidMonths: 24, recordedEmployee: null, startAge: 65, ...over }, severance: null,
+    },
+  })
+  const idx = () => 1
+
+  it('20歳から今までの月数から、入っていない月数を引いたものが「これまで」になる', () => {
+    const d = pensionDetail(person(), 65, Y0, flat, 6_000_000, idx)
+    expect(d.pastMonths).toBe(20 * 12 - 24)
+    expect(d.futureMonths).toBe(25 * 12)
+  })
+
+  it('額面が一定なら、老齢厚生年金 = 額面 × 加入年数 × 5.481/1000', () => {
+    const d = pensionDetail(person(), 65, Y0, flat, 6_000_000, idx)
+    expect(d.employee).toBeCloseTo(6_000_000 * (43 * 12) / 12 * 5.481 / 1000, 0)
+    expect(d.annual).toBeCloseTo(d.basic + d.employee, 0)
+  })
+
+  it('入っていない月数が増えると年金が減る', () => {
+    const a = pensionDetail(person({ unpaidMonths: 0 }), 65, Y0, flat, 6_000_000, idx)
+    const b = pensionDetail(person({ unpaidMonths: 120 }), 65, Y0, flat, 6_000_000, idx)
+    expect(b.employee).toBeLessThan(a.employee)
+  })
+
+  it('ねんきん定期便の金額があれば、これまでの分はそれを使う', () => {
+    const d = pensionDetail(person({ recordedEmployee: 300_000 }), 65, Y0, flat, 6_000_000, idx)
+    expect(d.employee).toBeCloseTo(300_000 + 6_000_000 * 25 * 5.481 / 1000, 0)
+  })
+
+  it('70歳まで繰下げると42%増える', () => {
+    const d = pensionDetail(person({ startAge: 70 }), 65, Y0, flat, 6_000_000, idx)
+    expect(d.startAdjust).toBeCloseTo(1.42)
   })
 })

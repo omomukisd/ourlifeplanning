@@ -20,7 +20,7 @@ export function sampleHousehold(startYear = new Date().getFullYear()): Household
           netAnnual: 4_800_000,
           incomeCurve: DEFAULT_INCOME_CURVE.map((s) => ({ ...s })),
           retireAge: 65, sideIncome: { netAnnual: 1_200_000, untilAge: 60 }, reducedPeriods: [],
-          pension: { recordedEmployee: 250_000, startAge: 65 }, severance: { age: 65, amount: 10_000_000 },
+          pension: { unpaidMonths: 24, recordedEmployee: null, startAge: 65 }, severance: { age: 65, amount: 10_000_000 },
         },
       },
       {
@@ -29,7 +29,7 @@ export function sampleHousehold(startYear = new Date().getFullYear()): Household
           netAnnual: 3_600_000,
           incomeCurve: DEFAULT_INCOME_CURVE.map((s) => ({ ...s })),
           retireAge: 65, sideIncome: { netAnnual: 1_000_000, untilAge: 60 }, reducedPeriods: [],
-          pension: { recordedEmployee: 180_000, startAge: 65 }, severance: null,
+          pension: { unpaidMonths: 36, recordedEmployee: null, startAge: 65 }, severance: null,
         },
       },
       {

@@ -252,3 +252,10 @@ details.section > .body { padding: 0 16px 16px; }
 .sync-line { font-size: 12px; color: var(--muted); margin: -4px 0 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
 .sync-line.error { color: var(--critical-ink); }
 .banner.warn { background: var(--critical-wash); color: var(--ink); }
+
+/* 年金の見込み */
+.pension-box { background: var(--surface-2, var(--bg)); border: 1px solid var(--grid); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+.pension-row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-top: 6px; }
+.pension-row:first-child { margin-top: 0; }
+.pension-row strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.pension-sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
